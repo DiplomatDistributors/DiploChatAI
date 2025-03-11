@@ -6,7 +6,6 @@ from yaml.loader import SafeLoader
 import pyodbc  
 import pandas as pd  
 from datetime import datetime  
-from statsmodels.tsa.statespace.sarimax import SARIMAX
 from openai import AzureOpenAI 
 import warnings 
 import time 
@@ -304,7 +303,8 @@ if st.session_state['authentication_status']:
             - 'Net VAT': The net sales with tax.
             - 'Gross VAT': The gross sales with tax.
             - 'Units': the number of units.
-            - **Note**: This data relates to the sell in of diplomat and needs the material barcode from the material table to connect to external data like chp and others. 
+            - **Note**: This data relates to the sell in of diplomat and needs the material barcode from the material table to connect to external data like chp and others,
+                        And if you asked about diplomat which is not in israel , use Dollar (multiple the Answer by Dollar value and put sign)
 
         
     6. **DW_DIM_CUSTOMERS** ('customer_df'):
@@ -617,7 +617,7 @@ if st.session_state['authentication_status']:
         coi = chp_or_invoices
         so = so_dict[sales_org]
         #Define tables and queries
-        tables = {
+        tables = { # AGGR_MONTHLY_DW_FACT_STORNEXT
             f'AGGR_{res_tp.upper()}_DW_FACT_STORENEXT_BY_INDUSTRIES_SALES': f"""
                 SELECT Day, Barcode, Format_Name, Sales_NIS, Sales_Units, Price_Per_Unit
                 FROM [dbo].[AGGR_{res_tp.upper()}_DW_FACT_STORENEXT_BY_INDUSTRIES_SALES]
@@ -819,10 +819,6 @@ if st.session_state['authentication_status']:
     
     st.title(f"{user_name} {res_tp.capitalize()} Sales Copilot 🤖")  
     
-    # # Rerun button logic in the sidebar
-    # if st.sidebar.button("Reload Data"):
-    #     st.session_state['refresh'] = True
-    #     st.rerun()  # This will rerun the whole app
 
     dataframes = load_data(res_tp,coi,so)  
     
@@ -862,8 +858,6 @@ if st.session_state['authentication_status']:
     )  
     MODEL = "Diplochat"  
     
-    # base_history = [{"role": "system", "content": sys_msg}]+examples
-
     # Initialize log_dfs 
     if 'log_dfs' not in st.session_state:  
         st.session_state.log_dfs = []  
@@ -912,24 +906,11 @@ if st.session_state['authentication_status']:
     # Display chat messages from history on app rerun  
     for message in st.session_state.messages:  
         if message["role"] == 'assistant':  
-            with st.chat_message(message["role"], avatar='🤖'):  
-                # display_txt = f"{message["content"]} user feedback: {st.session_state.user_feedback} last feedbacks {st.session_state.user_feedback_lst}" 
-                # display_txt = message["content"]+f' history_length: {len(st.session_state.base_history)}'
-                # st.markdown(display_txt)
-                # rtl
-                # if is_hebrew(message["content"]):
-                #     f0string = f'<div style="direction: rtl; text-align: right;">{message["content"]}</div>'
-                #     st.markdown(f0string, unsafe_allow_html=True)
-                # else:                       
+            with st.chat_message(message["role"], avatar='🤖'):                    
                 st.markdown(message["content"], unsafe_allow_html=True)
 
         elif message["role"] == 'user':  
-            with st.chat_message(message["role"], avatar=user_avatar):  
-                # rtl
-                # if is_hebrew(message["content"]):
-                #     f0string = f'<div style="direction: rtl; text-align: right;">{message["content"]}</div>'
-                #     st.markdown(f0string, unsafe_allow_html=True)
-                # else:                       
+            with st.chat_message(message["role"], avatar=user_avatar):               
                 st.markdown(message["content"])
 
 
@@ -1035,9 +1016,9 @@ if st.session_state['authentication_status']:
                     code = re.sub(r"^(\s*)import\s", r"\1#import ", code, flags=re.MULTILINE)  
                     
                     if coi=='CHP':
-                        local_context = {'chp':chp,'stnx_sales':stnx_sales,'stnx_items':stnx_items,'pd':pd,'np':np,'dt_df':dt_df,'SARIMAX':SARIMAX,'customer_df':customer_df,'industry_df':industry_df,'material_df':material_df,'base64':base64,'BytesIO':BytesIO,'plt':plt}
+                        local_context = {'chp':chp,'inv_df':inv_df,'stnx_sales':stnx_sales,'stnx_items':stnx_items,'pd':pd,'np':np,'dt_df':dt_df,'customer_df':customer_df,'industry_df':industry_df,'material_df':material_df,'base64':base64,'BytesIO':BytesIO,'plt':plt}
                     else:
-                        local_context = {'stnx_sales':stnx_sales,'stnx_items':stnx_items,'pd':pd,'np':np,'dt_df':dt_df,'SARIMAX':SARIMAX,'inv_df':inv_df,'customer_df':customer_df,'industry_df':industry_df,'material_df':material_df,'base64':base64,'BytesIO':BytesIO,'plt':plt}
+                        local_context = {'chp':chp,'inv_df':inv_df,'stnx_sales':stnx_sales,'stnx_items':stnx_items,'customer_df':customer_df,'industry_df':industry_df,'material_df':material_df,'dt_df':dt_df,'pd':pd,'np':np,'base64':base64,'BytesIO':BytesIO,'plt':plt}
 
                     exec(code, {}, local_context)
                     answer = local_context.get('answer', "No answer found.") 
