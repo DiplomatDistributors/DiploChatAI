@@ -303,9 +303,7 @@ if st.session_state['authentication_status']:
             - 'Net VAT': The net sales with tax.
             - 'Gross VAT': The gross sales with tax.
             - 'Units': the number of units.
-            - **Note**: This data relates to the sell in of diplomat and needs the material barcode from the material table to connect to external data like chp and others,
-                        And if you asked about diplomat which is not in israel , use Dollar (multiple the Answer by Dollar value and put sign)
-
+            - **Note**: This data relates to the sell in of diplomat and needs the material barcode from the material table to connect to external data like chp and others.
         
     6. **DW_DIM_CUSTOMERS** ('customer_df'):
         - **Description**: The customers's information.
