@@ -1,0 +1,23 @@
+.vscode/
+__pycache__/
+*.pyc
+
+# סביבות עבודה
+.venv/
+env/
+venv/
+
+# קבצים אישיים
+.env
+Dataloader.ipynb
+auth.py
+requirements_backup.txt
+streamlit_app.py
+Test.py
+
+# נתוני ביניים
+.parquet
+.parquet_files/
+
+Backup/
+flask_session/
