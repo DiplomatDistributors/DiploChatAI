@@ -1,8 +1,9 @@
 import os
-import pandas as pd
 import tempfile
+import pandas as pd
 import streamlit as st
 from pyluach import dates
+import concurrent.futures
 import time
 
 class DataLoader:
@@ -39,69 +40,76 @@ class DataLoader:
         dt_df['HOLIDAY'] = dt_df['DATE'].apply(lambda x: self.get_jewish_holidays(x.year, x.month, x.day))
         return dt_df
 
-    def load_data_with_progress(self):
-        """Load parquet files with a Streamlit progress bar."""
-        dataframes = {}
-        files = [f for f in os.listdir(self.parquet_dir) if f.endswith(".parquet")]
-        total_files = len(files)
-
-        # יצירת Progress Bar
-        st.markdown(
-            """
-            <style>
-            .progress-container {
-                width: 100%;
-                background-color: #e0e0e0;
-                border-radius: 10px;
-                overflow: hidden;
-                direction: rtl;
-                height: 15px;
-                margin-bottom: 10px;
-                position: relative;
-            }
-            .progress-bar {
-                height: 100%;
-                background: linear-gradient(45deg, #8000FF, #FF00FF);
-                width: 0%;
-                border-radius: 10px;
-                transition: width 0.5s;
-            }
-            </style>
-            """,
-            unsafe_allow_html=True,
-        )
-
-        progress_html = st.empty()
-
-        for i, file_name in enumerate(files):
-            file_path = os.path.join(self.parquet_dir, file_name)
-            df = pd.read_parquet(file_path)
-
-            # Normalize key name by removing ".parquet"
-            key = file_name.replace(".parquet", "")
-            dataframes[key] = df
-
-            # Convert date columns if exist
+    def load_single_file(self, file_path):
+        """Load a single parquet file, convert dates if needed."""
+        try:
+            df = pd.read_parquet(file_path, engine="pyarrow")
             for col in ['Day', 'DATE']:
                 if col in df.columns:
                     df[col] = pd.to_datetime(df[col], errors='coerce')
+            key = os.path.basename(file_path).replace(".parquet", "")
+            return key, df
+        except Exception as e:
+            print(f"[ERROR] Failed to load {file_path}: {e}")
+            return None, None
 
-            # Update progress bar
-            progress_percentage = int(((i + 1) / total_files) * 100)
-            progress_html.markdown(
-                f"""
-                <div class="progress-container">
-                    <div class="progress-bar" style="width: {progress_percentage}%;"></div>
-                </div>
-                """,
-                unsafe_allow_html=True,
-            )
-            time.sleep(0.2)
+    def load_data_with_progress(self):
+        """Load all parquet files with a Streamlit progress bar."""
+        dataframes = {}
+        files = [os.path.join(self.parquet_dir, f) for f in os.listdir(self.parquet_dir) if f.endswith(".parquet")]
+        total_files = len(files)
+
+        if total_files == 0:
+            st.error("❌ לא נמצאו קבצי פרקט לטעינה!")
+            st.stop()
+
+        st.markdown("""
+        <style>
+        .progress-container {
+            width: 100%;
+            background-color: #e0e0e0;
+            border-radius: 10px;
+            overflow: hidden;
+            direction: rtl;
+            height: 15px;
+            margin-bottom: 10px;
+            position: relative;
+        }
+        .progress-bar {
+            height: 100%;
+            background: linear-gradient(45deg, #8000FF, #FF00FF);
+            width: 0%;
+            border-radius: 10px;
+            transition: width 0.5s;
+        }
+        </style>
+        """, unsafe_allow_html=True)
+
+        progress_html = st.empty()
+
+        with concurrent.futures.ThreadPoolExecutor(max_workers=8) as executor:
+            futures = {executor.submit(self.load_single_file, file_path): file_path for file_path in files}
+
+            for i, future in enumerate(concurrent.futures.as_completed(futures)):
+                key, df = future.result()
+                if key and df is not None:
+                    dataframes[key] = df
+
+                # Update progress bar
+                progress_percentage = int(((i + 1) / total_files) * 100)
+                progress_html.markdown(
+                    f"""
+                    <div class="progress-container">
+                        <div class="progress-bar" style="width: {progress_percentage}%;"></div>
+                    </div>
+                    """,
+                    unsafe_allow_html=True,
+                )
 
         st.success("✅ כל הקבצים נטענו בהצלחה!")
         progress_html.empty()
 
-        # Create date DataFrame based on range from AGGR_WEEKLY_DW_FACT_STORENEXT_BY_INDUSTRIES_SALES
+        # יצירת טבלת תאריכים
         if 'AGGR_WEEKLY_DW_FACT_STORENEXT_BY_INDUSTRIES_SALES' in dataframes:
             start_date = dataframes['AGGR_WEEKLY_DW_FACT_STORENEXT_BY_INDUSTRIES_SALES']['Day'].min()
             end_date = dataframes['AGGR_WEEKLY_DW_FACT_STORENEXT_BY_INDUSTRIES_SALES']['Day'].max()
