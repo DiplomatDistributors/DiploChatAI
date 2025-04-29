@@ -28,14 +28,7 @@ def get_base64_image(image_path):
 def load_lottie_file(filepath: str):
     with open(filepath, "r") as f:
         return json.load(f)
-    
-def clean_code_answer(python_code):
-    cleaned_code = re.sub(r'```python', '', python_code)  # הסרת תגית הפתיחה
-    cleaned_code = re.sub(r'```', '', cleaned_code)  # הסרת תגית הסגירה
 
-    # שלב 2: ניקוי הקוד (הסרת print ו-import)
-    cleaned_code = re.sub(r"^(\s*)print\(", r"\1#print(", cleaned_code, flags=re.MULTILINE)
-    cleaned_code = re.sub(r"^(\s*)import\s", r"\1#import ", cleaned_code, flags=re.MULTILINE)
     return cleaned_code
 
 def get_local_scope():

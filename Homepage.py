@@ -19,7 +19,8 @@ CLIENT_ID = "d37190f1-08a2-43f2-8434-9d1fa30ed7ae"
 TENANT_ID = "258fd493-7c88-46ef-b497-f493b077448f"
 CLIENT_SECRET = os.getenv("MICROSOFT_PROVIDER_AUTHENTICATION_SECRET")
 AUTHORITY = f"https://login.microsoftonline.com/{TENANT_ID}"
-REDIRECT_URI = "https://diplochatai-dha6h6c0fdbhd2ev.centralus-01.azurewebsites.net"
+# REDIRECT_URI = "https://diplochatai-dha6h6c0fdbhd2ev.centralus-01.azurewebsites.net"
+REDIRECT_URI = "http://localhost:8501"
 SCOPES = ["User.Read"]
 GRAPH_API_URL = "https://graph.microsoft.com/v1.0/me"
 

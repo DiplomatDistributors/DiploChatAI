@@ -1,14 +1,8 @@
-[server]
-port = 8000
-enableCORS = false
-headless = true
-
 [theme]
-primaryColor = "#8000FF"
-backgroundColor = "#fafbff"
-secondaryBackgroundColor = "#E4E7EB"
-textColor = "#343A40"
-font = "sans serif"
-
+primaryColor = "#8000FF"  # צבע עיקרי (כמו כפתורים וקווים)
+backgroundColor = "#fafbff"  # צבע רקע
+secondaryBackgroundColor = "#E4E7EB"  # צבע רקע נוסף
+textColor = "#343A40"  # צבע טקסט
+font = "sans serif"  # גופן (Calibri, Arial וכו')
 [client]
 showSidebarNavigation = false

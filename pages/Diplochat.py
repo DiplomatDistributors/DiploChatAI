@@ -8,6 +8,8 @@ from DiploModel import *
 from Dataloader import *
 from MainFunctions import * 
 from Homepage import *
+from agents.generator import *
+from agents.decorator import *
 
 import streamlit as st
 from streamlit_navigation_bar import st_navbar
@@ -25,6 +27,9 @@ load_css()
 if 'page' not in st.session_state:
     st.session_state['page'] = None
 
+if 'Agents' not in st.session_state:
+    st.session_state['Agents'] = {'Generator' : GeneratorAgent() , 'Decorator' : DecoratorAgent()}
+
 if 'Diplochat' not in st.session_state:
     st.session_state['Diplochat'] = DiploChat()
 
@@ -36,6 +41,9 @@ if 'Dataframes' not in st.session_state:
 
 if "Conversation" not in st.session_state:  
         st.session_state['Conversation'] = []
+        
+if 'last_prompt_sent' not in st.session_state:
+    st.session_state.last_prompt_sent = None
 
 if "user" not in st.session_state or not st.session_state["user"]:
 
@@ -106,13 +114,14 @@ if st.session_state['page'] == 'Home':
     st.write(f"📧 אימייל : {st.session_state['user']['mail']}")
 
 if st.session_state['page'] == 'דף הבית':
+    
     if st.session_state['Dataframes'] is None:
         st.session_state['Dataframes'] = st.session_state['Dataloader'].load_data_with_progress()
-        
-        time.sleep(2)
+        time.sleep(0.5)
         st.rerun()
+    
     else:    
-        # Conversation History 
+
         for message in st.session_state['Conversation']:  
             if message["role"] == 'assistant':  
                 with st.chat_message("assistant"):                   
@@ -124,7 +133,7 @@ if st.session_state['page'] == 'דף הבית':
 
 
         if prompt := st.chat_input("איך אפשר לעזור?"):
-            st.session_state['Conversation'].append({"role" : "user" , "content" : prompt})
+            st.session_state['Conversation'].append({"role": "user", "content": prompt})
 
             with st.chat_message("user"):
                 st.markdown(prompt)
@@ -133,24 +142,42 @@ if st.session_state['page'] == 'דף הבית':
             with thinking_placeholder:
                 st_lottie(thinking_animation, height=70, key="loading")
 
-            time.sleep(3)
+            time.sleep(1.5)
             thinking_placeholder.empty()
-            
-            if prompt:
-                with st.chat_message("assistant"):
 
-                    code = st.session_state['Diplochat'].model_response(prompt)
-                    st.code(code)
+            with st.chat_message("assistant"):
+                generator_agent = st.session_state['Agents']['Generator']
+                decorator_agent = st.session_state['Agents']['Decorator']
+                
+                answer = generator_agent.response(prompt)
+                local_scope = get_local_scope()
+                
+                max_retries = 10
+                retries = 0
+                success = False
 
-                    cleaned_code = clean_code_answer(code)
-                    local_scope = get_local_scope()
-
+                while not success and retries < max_retries:
                     try:
-                        exec(cleaned_code, {}, local_scope)
-                        answer = local_scope.get("answer", "⚠️ לא נמצאה תשובה.")
-                        st.markdown(answer)  # הצגת התוצאה שהמודל מחזיר בסופו של קוד
-                        st.session_state['Conversation'].append({"role": "assistant", "content": local_scope['answer']})
+
+                        exec(answer.python_code, {}, local_scope)
+
+                        agent_result = local_scope.get("result", "⚠️ לא נמצאה תשובה.")
+                        st.code(answer.python_code)
+                        decorator_result = decorator_agent.decorate(prompt, answer.python_code_explanation, agent_result)
+
+                        placeholder = st.empty()
+                        streamed_text = ""
+                        for char in decorator_result:
+                            streamed_text += char
+                            placeholder.markdown(streamed_text, unsafe_allow_html=True)
+                            time.sleep(0.01)
+
+                        st.session_state['Conversation'].append({"role": "assistant", "content": decorator_result})
+                        success = True
+                        time.sleep(1)
+                        
                     except Exception as e:
-                        error_explained = traceback.format_exc()
-                        st.error("תקלה בהרצת הקוד")
+                        retries += 1
+                        if retries >= max_retries:
+                            st.error(f"❌ נכשל לאחר {max_retries} ניסיונות. שגיאה: {str(e)}")
 
