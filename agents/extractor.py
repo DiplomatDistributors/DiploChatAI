@@ -115,7 +115,7 @@ def identify_entity_type(entity_name: str) -> dict:
     4. Partial match in Brand_Name
     5. Partial match in Item_Name
     """
-    stnx_items = pd.read_parquet("parquet_files/DW_DIM_STORENEXT_BY_INDUSTRIES_ITEMS.parquet")
+    stnx_items = st.session_state['Dataframes']['stnx_items']
     a = entity_name
     entity_name = entity_name.strip()
 
