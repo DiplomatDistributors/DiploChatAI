@@ -117,8 +117,9 @@ if st.session_state['page'] == 'דף הבית':
     
     if st.session_state['Dataframes'] is None:
         st.session_state['Dataframes'] = st.session_state['Dataloader'].load_data_with_progress()
-        time.sleep(0.5)
-        st.rerun()
+        st.write(st.session_state['Dataframes'])
+        # time.sleep(0.5)
+        # st.rerun()
     
     else:    
 
