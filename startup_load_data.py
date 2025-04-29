@@ -6,7 +6,7 @@ from azure.storage.blob import BlobServiceClient
 
 # Configuration
 BLOB_CONNECTION_STRING = os.getenv("AZURE_STORAGE_CONNECTION_STRING")
-CONTAINER_NAME = "your-container-name"  # Replace with your container name
+CONTAINER_NAME = "data"
 BLOB_FILE_NAMES = [
     "stnx_items.parquet",
     "stnx_sales.parquet",
