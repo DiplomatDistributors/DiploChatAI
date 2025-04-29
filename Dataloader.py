@@ -77,14 +77,16 @@ class DataLoader:
             file_path = os.path.join(self.parquet_dir, file_name)
             df = pd.read_parquet(file_path)
 
-            # המרה של עמודות Day / DATE
+            # Normalize key name by removing ".parquet"
+            key = file_name.replace(".parquet", "")
+            dataframes[key] = df
+
+            # Convert date columns if exist
             for col in ['Day', 'DATE']:
                 if col in df.columns:
                     df[col] = pd.to_datetime(df[col], errors='coerce')
 
-            dataframes[file_name.replace('.parquet', '')] = df
-
-            # עידכון Progress Bar
+            # Update progress bar
             progress_percentage = int(((i + 1) / total_files) * 100)
             progress_html.markdown(
                 f"""
@@ -99,21 +101,20 @@ class DataLoader:
         st.success("✅ כל הקבצים נטענו בהצלחה!")
         progress_html.empty()
 
-        # יצירת טבלת תאריכים מה-AGGR_WEEKLY_DW_FACT_STORENEXT_BY_INDUSTRIES_SALES
+        # Create date DataFrame based on range from AGGR_WEEKLY_DW_FACT_STORENEXT_BY_INDUSTRIES_SALES
         if 'AGGR_WEEKLY_DW_FACT_STORENEXT_BY_INDUSTRIES_SALES' in dataframes:
             start_date = dataframes['AGGR_WEEKLY_DW_FACT_STORENEXT_BY_INDUSTRIES_SALES']['Day'].min()
             end_date = dataframes['AGGR_WEEKLY_DW_FACT_STORENEXT_BY_INDUSTRIES_SALES']['Day'].max()
             dt_df = self.create_date_dataframe(start_date, end_date)
             dataframes['DATE_HOLIAY_DATA'] = dt_df
 
-        # מיפוי סטנדרטי
         return {
-            'chp': dataframes['AGGR_WEEKLY_DW_CHP'],
-            'inv_df': dataframes['AGGR_MONTHLY_DW_INVOICES'],
-            'stnx_sales': dataframes['AGGR_WEEKLY_DW_FACT_STORENEXT_BY_INDUSTRIES_SALES'],
-            'stnx_items': dataframes['DW_DIM_STORENEXT_BY_INDUSTRIES_ITEMS'],
-            'customer_df': dataframes['DW_DIM_CUSTOMERS'].drop_duplicates(subset=['CUSTOMER_CODE']),
-            'industry_df': dataframes['DW_DIM_INDUSTRIES'],
-            'material_df': dataframes['DW_DIM_MATERIAL'].drop_duplicates(subset=['MATERIAL_NUMBER']),
-            'dt_df': dataframes['DATE_HOLIAY_DATA']
+            'chp': dataframes.get('AGGR_WEEKLY_DW_CHP'),
+            'inv_df': dataframes.get('AGGR_MONTHLY_DW_INVOICES'),
+            'stnx_sales': dataframes.get('AGGR_WEEKLY_DW_FACT_STORENEXT_BY_INDUSTRIES_SALES'),
+            'stnx_items': dataframes.get('DW_DIM_STORENEXT_BY_INDUSTRIES_ITEMS'),
+            'customer_df': dataframes.get('DW_DIM_CUSTOMERS', pd.DataFrame()).drop_duplicates(subset=['CUSTOMER_CODE']),
+            'industry_df': dataframes.get('DW_DIM_INDUSTRIES'),
+            'material_df': dataframes.get('DW_DIM_MATERIAL', pd.DataFrame()).drop_duplicates(subset=['MATERIAL_NUMBER']),
+            'dt_df': dataframes.get('DATE_HOLIAY_DATA')
         }
