@@ -1,10 +1,10 @@
 import os
-import tempfile
 import pandas as pd
-import streamlit as st
+import tempfile
 from pyluach import dates
-import concurrent.futures
+import streamlit as st
 import time
+import concurrent.futures
 
 class DataLoader:
     def __init__(self):
@@ -40,30 +40,27 @@ class DataLoader:
         dt_df['HOLIDAY'] = dt_df['DATE'].apply(lambda x: self.get_jewish_holidays(x.year, x.month, x.day))
         return dt_df
 
-    def load_single_file(self, file_path):
-        """Load a single parquet file, convert dates if needed."""
-        try:
-            df = pd.read_parquet(file_path, engine="pyarrow")
-            for col in ['Day', 'DATE']:
-                if col in df.columns:
-                    df[col] = pd.to_datetime(df[col], errors='coerce')
-            key = os.path.basename(file_path).replace(".parquet", "")
-            return key, df
-        except Exception as e:
-            print(f"[ERROR] Failed to load {file_path}: {e}")
-            return None, None
+def read_parquet_file(file_path):
+    """Helper function to read a parquet file."""
+    try:
+        df = pd.read_parquet(file_path, engine="pyarrow")
+        for col in ['Day', 'DATE']:
+            if col in df.columns:
+                df[col] = pd.to_datetime(df[col], errors='coerce')
+        return df
+    except Exception as e:
+        print(f"Error reading {file_path}: {e}")
+        return None
 
-    def load_data_with_progress(self):
-        """Load all parquet files with a Streamlit progress bar."""
-        dataframes = {}
-        files = [os.path.join(self.parquet_dir, f) for f in os.listdir(self.parquet_dir) if f.endswith(".parquet")]
-        total_files = len(files)
+@st.cache_resource
+def load_data_with_progress(parquet_dir: str):
+    """Load parquet files with a Streamlit progress bar, cached and parallelized."""
+    dataframes = {}
+    files = [f for f in os.listdir(parquet_dir) if f.endswith(".parquet")]
+    total_files = len(files)
 
-        if total_files == 0:
-            st.error("❌ לא נמצאו קבצי פרקט לטעינה!")
-            st.stop()
-
-        st.markdown("""
+    # Styling for progress bar
+    st.markdown("""
         <style>
         .progress-container {
             width: 100%;
@@ -83,46 +80,51 @@ class DataLoader:
             transition: width 0.5s;
         }
         </style>
-        """, unsafe_allow_html=True)
+    """, unsafe_allow_html=True)
 
-        progress_html = st.empty()
+    progress_html = st.empty()
 
-        with concurrent.futures.ThreadPoolExecutor(max_workers=16) as executor:
-            futures = {executor.submit(self.load_single_file, file_path): file_path for file_path in files}
+    # Use ThreadPoolExecutor to parallelize reading
+    with concurrent.futures.ThreadPoolExecutor(max_workers=8) as executor:
+        futures = {}
+        for file_name in files:
+            file_path = os.path.join(parquet_dir, file_name)
+            futures[file_name] = executor.submit(read_parquet_file, file_path)
 
-            for i, future in enumerate(concurrent.futures.as_completed(futures)):
-                key, df = future.result()
-                if key and df is not None:
-                    dataframes[key] = df
+        for i, (file_name, future) in enumerate(futures.items()):
+            df = future.result()
+            if df is not None:
+                key = file_name.replace(".parquet", "")
+                dataframes[key] = df
 
-                # Update progress bar
-                progress_percentage = int(((i + 1) / total_files) * 100)
-                progress_html.markdown(
-                    f"""
-                    <div class="progress-container">
-                        <div class="progress-bar" style="width: {progress_percentage}%;"></div>
-                    </div>
-                    """,
-                    unsafe_allow_html=True,
-                )
+            progress_percentage = int(((i + 1) / total_files) * 100)
+            progress_html.markdown(
+                f"""
+                <div class="progress-container">
+                    <div class="progress-bar" style="width: {progress_percentage}%;"></div>
+                </div>
+                """,
+                unsafe_allow_html=True,
+            )
 
-        st.success("✅ כל הקבצים נטענו בהצלחה!")
-        progress_html.empty()
+    st.success("✅ כל הקבצים נטענו בהצלחה!")
+    progress_html.empty()
 
-        # יצירת טבלת תאריכים
-        if 'AGGR_WEEKLY_DW_FACT_STORENEXT_BY_INDUSTRIES_SALES' in dataframes:
-            start_date = dataframes['AGGR_WEEKLY_DW_FACT_STORENEXT_BY_INDUSTRIES_SALES']['Day'].min()
-            end_date = dataframes['AGGR_WEEKLY_DW_FACT_STORENEXT_BY_INDUSTRIES_SALES']['Day'].max()
-            dt_df = self.create_date_dataframe(start_date, end_date)
-            dataframes['DATE_HOLIAY_DATA'] = dt_df
+    # Add dates dataframe
+    if 'AGGR_WEEKLY_DW_FACT_STORENEXT_BY_INDUSTRIES_SALES' in dataframes:
+        loader = DataLoader()
+        start_date = dataframes['AGGR_WEEKLY_DW_FACT_STORENEXT_BY_INDUSTRIES_SALES']['Day'].min()
+        end_date = dataframes['AGGR_WEEKLY_DW_FACT_STORENEXT_BY_INDUSTRIES_SALES']['Day'].max()
+        dt_df = loader.create_date_dataframe(start_date, end_date)
+        dataframes['DATE_HOLIAY_DATA'] = dt_df
 
-        return {
-            'chp': dataframes.get('AGGR_WEEKLY_DW_CHP'),
-            'inv_df': dataframes.get('AGGR_MONTHLY_DW_INVOICES'),
-            'stnx_sales': dataframes.get('AGGR_WEEKLY_DW_FACT_STORENEXT_BY_INDUSTRIES_SALES'),
-            'stnx_items': dataframes.get('DW_DIM_STORENEXT_BY_INDUSTRIES_ITEMS'),
-            'customer_df': dataframes.get('DW_DIM_CUSTOMERS', pd.DataFrame()).drop_duplicates(subset=['CUSTOMER_CODE']),
-            'industry_df': dataframes.get('DW_DIM_INDUSTRIES'),
-            'material_df': dataframes.get('DW_DIM_MATERIAL', pd.DataFrame()).drop_duplicates(subset=['MATERIAL_NUMBER']),
-            'dt_df': dataframes.get('DATE_HOLIAY_DATA')
-        }
+    return {
+        'chp': dataframes.get('AGGR_WEEKLY_DW_CHP'),
+        'inv_df': dataframes.get('AGGR_MONTHLY_DW_INVOICES'),
+        'stnx_sales': dataframes.get('AGGR_WEEKLY_DW_FACT_STORENEXT_BY_INDUSTRIES_SALES'),
+        'stnx_items': dataframes.get('DW_DIM_STORENEXT_BY_INDUSTRIES_ITEMS'),
+        'customer_df': dataframes.get('DW_DIM_CUSTOMERS', pd.DataFrame()).drop_duplicates(subset=['CUSTOMER_CODE']),
+        'industry_df': dataframes.get('DW_DIM_INDUSTRIES'),
+        'material_df': dataframes.get('DW_DIM_MATERIAL', pd.DataFrame()).drop_duplicates(subset=['MATERIAL_NUMBER']),
+        'dt_df': dataframes.get('DATE_HOLIAY_DATA')
+    }

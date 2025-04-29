@@ -116,9 +116,11 @@ if st.session_state['page'] == 'Home':
 if st.session_state['page'] == 'דף הבית':
     
     if st.session_state['Dataframes'] is None:
-        st.session_state['Dataframes'] = st.session_state['Dataloader'].load_data_with_progress()
+        loader = st.session_state['Dataloader']
+        st.session_state['Dataframes'] = load_data_with_progress(loader.parquet_dir)
         time.sleep(0.5)
         st.rerun()
+
     
     else:    
 
