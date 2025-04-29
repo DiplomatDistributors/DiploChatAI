@@ -18,11 +18,11 @@ class DiploChat:
         """Initialize the instance with required configurations."""
         self.openai_key = "86bedc710e5e493290cb2b0ce6f16d80"  # API Key
         self.endpoint = "https://ai-usa.openai.azure.com/"  # Endpoint
-        self.api_version = "2024-02-15-preview"  # API Version
+        self.api_version = "2024-08-01-preview"  # API Version
         self.deployment_id = "Diplochat"  # Deployment ID
         self.system_prompt = self.get_system_prompt()
 
-        self.client = AzureOpenAI(
+        self.client = AzureOpenAI( 
             azure_endpoint = self.endpoint,
             api_key = self.openai_key,
             api_version = self.api_version,
@@ -225,6 +225,7 @@ class DiploChat:
                     {"role": "user", "content": prompt},
                 ],
                 temperature=0,
+                max_tokens=2000,
                 stream=False
             )
             return response.choices[0].message.content

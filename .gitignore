@@ -15,6 +15,7 @@ venv/
 auth.py
 
 # Notebooks and backup files
+*.ipynb
 Dataloader.ipynb
 Test.py
 streamlit_app.py
