@@ -87,7 +87,7 @@ class DataLoader:
 
         progress_html = st.empty()
 
-        with concurrent.futures.ThreadPoolExecutor(max_workers=8) as executor:
+        with concurrent.futures.ThreadPoolExecutor(max_workers=16) as executor:
             futures = {executor.submit(self.load_single_file, file_path): file_path for file_path in files}
 
             for i, future in enumerate(concurrent.futures.as_completed(futures)):

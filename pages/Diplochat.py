@@ -152,7 +152,7 @@ if st.session_state['page'] == 'דף הבית':
                 answer = generator_agent.response(prompt)
                 local_scope = get_local_scope()
                 
-                max_retries = 10
+                max_retries = 15
                 retries = 0
                 success = False
 
