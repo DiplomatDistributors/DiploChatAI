@@ -6,6 +6,7 @@ from langchain_openai import AzureChatOpenAI
 from langchain_core.language_models.chat_models import BaseChatModel
 from langchain_core.prompts import ChatPromptTemplate, SystemMessagePromptTemplate , HumanMessagePromptTemplate
 from pydantic import BaseModel, Field, field_validator
+from agents.base import BaseAgent
 from typing import Optional
 from datetime import datetime
 import time
@@ -20,7 +21,7 @@ import pandas as pd
 load_dotenv()
 
 
-class DecoratorAgent:
+class DecoratorAgent(BaseAgent):
 
     def __init__(self):
         self.llm = AzureChatOpenAI(
@@ -73,30 +74,41 @@ class DecoratorAgent:
         )
 
 
-    def decorate(self, question , process , result , max_retries: int = 2, delay: float = 1.0) -> dict:
+    def decorate(self, user_question , result , max_retries: int = 2, delay: float = 1.0) -> dict:
         
         prompt_template = ChatPromptTemplate.from_messages([
             self.system_prompt,
-            HumanMessagePromptTemplate.from_template("original question: {question} \n"
-                                                     "logical process:  {process} \n"
+            HumanMessagePromptTemplate.from_template("user_question: {user_question} \n"
                                                      "actual output: {result}"  )
         ])
 
         full_chain = prompt_template | self.llm
     
+        self.reset_fields()
+        self.set_question(user_question)
+        self.start_timer()
+
         last_error = None
         for attempt in range(1, max_retries + 1):
+            self.increment_attempts()
             try:
-                response = full_chain.invoke({"question": question , "process" : process , "result" :result})
+                self.increment_calls()
+                response = full_chain.invoke({"user_question": user_question  , "result" :result})
+                self.stop_timer()
+                self.set_answer(response.content)
                 return response.content
+            
             except RateLimitError as e:
-                last_error = e
                 logging.warning(f"[Retry {attempt}/{max_retries}] Rate limit error: {e}")
-                time.sleep(delay * attempt)  # exponential backoff
+                self.set_error(e)
+
             except Exception as e:
                 logging.error(f"[Attempt {attempt}] Unexpected error: {e}")
+                self.set_error(str(e))
+                self.stop_timer()
                 raise e  # for other exceptions, fail immediately
 
+        self.stop_timer()
         # if we reached here, all retries failed
         raise RuntimeError(f"Failed after {max_retries} retries due to rate limit. Last error: {last_error}")
     

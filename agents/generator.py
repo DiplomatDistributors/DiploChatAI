@@ -1,14 +1,18 @@
 from langchain_openai import AzureChatOpenAI
 from langchain_core.language_models.chat_models import BaseChatModel
-from langchain_core.prompts import ChatPromptTemplate, SystemMessagePromptTemplate
+from langchain_core.chat_history import InMemoryChatMessageHistory
+from langchain.prompts import SystemMessagePromptTemplate,MessagesPlaceholder,ChatPromptTemplate
+from langchain_core.runnables.history import RunnableWithMessageHistory
 from pydantic import BaseModel, Field, field_validator
 from agents.extractor import *
+from agents.base import BaseAgent
 from datetime import datetime
 import time
 import logging
 from openai import RateLimitError
 from dotenv import load_dotenv
 import os
+
 load_dotenv()
 
 
@@ -24,9 +28,14 @@ class AnswerStructure(BaseModel):
             line for line in code.splitlines() if not line.strip().startswith("#")
         )
         return cleaned.strip()
+    
 
 
-class GeneratorAgent:
+def get_chat_history() -> InMemoryChatMessageHistory:
+    return st.session_state['GeneratorHistory']
+
+    
+class GeneratorAgent(BaseAgent):
 
     def __init__(self):
         self.llm = AzureChatOpenAI(
@@ -228,36 +237,72 @@ class GeneratorAgent:
 
         **Guidelines for answering specific question types**:
                                                   
-        - *Market Share Questions*:
-            - When asked about the market share of a **specific brand or item**:
-                1. Use `stnx_items` to find matching items using `.str.contains(...)`.
-                2. Retrieve the `Category_Name` for that brand or item.
-                3. Filter all items in `stnx_items` that belong to the same `Category_Name`.
-                4. Calculate:
-                    - **Numerator** = Total sales (`Sales_NIS`) of the specific brand or item.
-                    - **Denominator** = Total sales (`Sales_NIS`) of the entire category (including the brand itself).
-                5. Market share = (Numerator / Denominator) * 100
+            - *Market Share Questions*:
 
-            - When asked about **competitors**:
-                1. Use `stnx_items` to find items in the relevant `Category_Name`.
-                2. Exclude items where `Supplier_Name == 'דיפלומט'`.
-                3. Calculate:
-                    - **Numerator** = Total sales (`Sales_NIS`) of competitors (excluding Diplomat).
-                    - **Denominator** = Total sales of the same category (excluding Diplomat).
-                4. Competitor market share = (Numerator / Denominator) * 100
-                                                          
-        -  *Important Filtering Rule*:
-            - Always filter `stnx_sales` based on `Barcode` values, not by directly applying conditions from `stnx_items`.
-            - When filtering sales by a category, brand, or item, first retrieve the list of `Barcodes` from `stnx_items`, then use `.isin(barcodes)` to filter `stnx_sales`.
-            - Never apply boolean conditions from `stnx_items` directly onto `stnx_sales`, as they have different indexes and will cause errors.
+                - When asked about the market share of a **specific brand or item**:
+                    1. Use `stnx_items` to find matching items using `.str.contains(...)` on `Brand_Name` or `Item_Name`.
+                    2. Retrieve the associated `Category_Name`.
+                    3. Filter all items in `stnx_items` that belong to the same `Category_Name`.
+                    4. Calculate:
+                        - **Numerator** = Total sales (`Sales_NIS`) of the specific brand or item.
+                        - **Denominator** = Total sales (`Sales_NIS`) of the entire category (including all suppliers).
+                    5. Market share = (Numerator / Denominator) * 100
 
+                - When asked about **competitors** (excluding Diplomat):
+                    1. Use `stnx_items` to find all items in the relevant `Category_Name`.
+                    2. Exclude items where `Supplier_Name == 'דיפלומט'`.
+                    3. Extract barcodes and use them to filter `stnx_sales`.
+                    4. Calculate:
+                        - **Numerator** = Total sales of competitors (excluding Diplomat).
+                        - **Denominator** = Total sales of the entire category (including Diplomat).
+                    5. Market share = (Numerator / Denominator) * 100
+                    6. If the question implies comparison, return a table with both Diplomat and competitors.
+
+                - When asked about a **specific brand or item excluding a supplier** (e.g., "פרינגלס שלא של דיפלומט"):
+                    1. Filter `stnx_items` using `.str.contains(...)` on `Brand_Name` or `Item_Name`.
+                    2. Exclude rows where `Supplier_Name == 'דיפלומט'` (or the mentioned supplier).
+                    3. Retrieve the associated `Category_Name`.
+                    4. Extract barcodes and use `.isin(...)` to filter `stnx_sales`.
+                    5. Calculate:
+                        - **Numerator** = Total sales of the brand or item excluding that supplier.
+                        - **Denominator** = Total sales of the entire category (including all suppliers).
+                    6. Market share = (Numerator / Denominator) * 100
+                    7. If the question implies comparison, return a table showing both included and excluded supplier contributions.
+
+
+        **Important Filtering Rule**:  
+            - When the user query contains both a brand (or item) **and** a supplier: 
+                Apply both filters together in `stnx_items`.
+            When performing any filtering, joining, or analysis involving multiple DataFrames (such as sales, items, customers, returns, invoices, etc):
+            - **Never apply a boolean mask from one DataFrame directly onto another**.  
+                For example, avoid:
+                ```python
+                barcodes = stnx_items[stnx_sales['Category'] == 'X']['Barcode']
+                ```
+
+            - Instead, always follow this pattern:
+                1. Apply filters inside the **source DataFrame** where the condition logically belongs (e.g., `stnx_items`, `customer_df`, `material_df`).
+                2. Extract the **linking values** (e.g., `Barcode`, `Customer_ID`, `Product_ID`) as a list or array.
+                3. Use `.isin(...)` to apply those values to filter the **target DataFrame**.
+
+                For example:
+                ```python
+                barcodes = stnx_items[stnx_items['Category_Name'] == 'X']['Barcode']
+                filtered_sales = stnx_sales[stnx_sales['Barcode'].isin(barcodes)]
+                ```
+
+            - This ensures logical separation between datasets and prevents index mismatches or unexpected filtering behavior.
+            - This rule applies to **all tables**:  
+                `stnx_sales`, `stnx_items`, `chp`, `dt_df`, `inv_df`, `material_df`, `customer_df`, `industry_df`, and any others that may be added.
+
+                                                         
         **Additional Instructions for Comparative Analyses:**
             - When the question involves multiple competitors, brands, categories, or products:
                 - Always construct a structured table where each row corresponds to a different entity (Supplier_Name, Brand_Name, etc.).
                 - For each entity, present the requested metrics (e.g., Sales_NIS, Market Share (%), Units Sold, Average Price).
                 - Only aggregate values across entities if the user explicitly requests an overall total.
                 - Prefer clear, descriptive column names, and sort the table if a ranking is implied.           
-                                                                                                         
+                                                                                                        
         **Final Notes**:
             - ***Your generated python code needs to store the answer in variable that called 'result'***
             - When you asked about item or brand in Hebrew , dont translate it to english. 
@@ -265,37 +310,113 @@ class GeneratorAgent:
                 1. First, try to detect if the query refers to a **specific brand** (מותג), by checking if the query text appears in the `Brand_Name` column using `.str.contains(...)`.
                 2. If there is **no match in `Brand_Name`**, only then check if the query refers to a **Item_Name** (מוצר) by searching the `Item_Name` column and using also  `.str.contains(...)`.
                 Always prioritize the most specific match (item over brand), unless context suggests otherwise.                                                          
-        
-                                                                                                                    
-                                                            
 
         """ , input_variables=["current_day"]
         )
 
     def response(self, user_question: str, max_retries: int = 5, delay: float = 1.0) -> dict:
+        
         extractor_agent = ExtractorAgent()
         context = extractor_agent.response(user_question)
-
+        extractor_agent.set_log("ExtractorAgent", st.session_state["user"]["mail"])
+        
         prompt_template = ChatPromptTemplate.from_messages([
             self.system_prompt,
+            MessagesPlaceholder(variable_name="history"),
             ("user", "Context:\n{context}"),
             ("user", "Question:\n{user_question}")
         ])
 
-        full_chain = prompt_template | self.structured_llm
-    
+        pipeline = prompt_template | self.structured_llm
+
+        pipeline_with_history = RunnableWithMessageHistory(
+            pipeline,
+            get_session_history=get_chat_history,
+            history_messages_key="history",
+            input_messages_key="user_question"
+        )
+
+        self.reset_fields()
+        self.set_question(user_question)
+        self.start_timer()
+
         last_error = None
         for attempt in range(1, max_retries + 1):
+            self.increment_attempts()
             try:
-                response = full_chain.invoke({"current_day": datetime.today().strftime("%Y-%m-%d") , "context" : context , "user_question" : user_question})
-                return response
+                self.increment_calls()
+                response = pipeline_with_history.invoke({
+                    "current_day": datetime.today().strftime("%Y-%m-%d"),
+                    "context": context,
+                    "user_question": user_question
+                },
+                config={"session_id": 'GeneratorHistory'})
+                self.stop_timer()
+                self.set_answer(response.python_code)
+                return response , context
+            
             except RateLimitError as e:
-                last_error = e
                 logging.warning(f"[Retry {attempt}/{max_retries}] Rate limit error: {e}")
-                time.sleep(delay * attempt)  # exponential backoff
+                self.set_error(e)
+                self.stop_timer()
+
             except Exception as e:
                 logging.error(f"[Attempt {attempt}] Unexpected error: {e}")
-                raise e  # for other exceptions, fail immediately
-
-        # if we reached here, all retries failed
+                self.set_error(str(e))
+                self.stop_timer()
+                raise e
+            
+        self.stop_timer()
         raise RuntimeError(f"Failed after {max_retries} retries due to rate limit. Last error: {last_error}")
+
+    def retry_with_error(self, user_question: str, previous_code: str, error_message: str) -> AnswerStructure:
+        max_retries = 5
+        
+        prompt_template = ChatPromptTemplate.from_messages([
+            self.system_prompt,
+            ("user", "User question:\n{user_question}"),
+            ("user", "Previous Python code:\n{previous_code}"),
+            ("user", "Error message:\n{error_message}"),
+            ("user", "Please fix the code and return a new version in 'python_code' and a brief explanation in 'python_code_explanation'.")
+        ])
+
+        full_chain = prompt_template | self.structured_llm
+
+        self.reset_fields()
+        self.set_question(user_question)
+        self.start_timer()
+        
+        last_error = None
+        for attempt in range(1, max_retries + 1):
+            self.increment_attempts()
+            try:
+                self.increment_calls()
+                response = full_chain.invoke({
+                    "current_day": datetime.today().strftime("%Y-%m-%d"),
+                    "user_question": user_question,
+                    "previous_code" : previous_code,
+                    "error_message" : error_message
+                })
+                self.stop_timer()
+                self.set_answer(response.python_code)
+                return response
+            
+            except RateLimitError as e:
+                logging.warning(f"[Retry {attempt}/{max_retries}] Rate limit error: {e}")
+                self.set_error(e)
+                self.stop_timer()
+
+            except Exception as e:
+                logging.error(f"[Attempt {attempt}] Unexpected error: {e}")
+                self.set_error(str(e))
+                self.stop_timer()
+                raise e
+            
+        self.stop_timer()
+        raise RuntimeError(f"Failed after {max_retries} retries due to rate limit. Last error: {last_error}")
+
+    def update_memory(self , context , user_question , answer , decorator_result):
+        st.session_state['GeneratorHistory'].add_user_message(context)
+        st.session_state['GeneratorHistory'].add_user_message(user_question)
+        st.session_state['GeneratorHistory'].add_ai_message(answer.python_code)
+        st.session_state['GeneratorHistory'].add_ai_message(decorator_result)

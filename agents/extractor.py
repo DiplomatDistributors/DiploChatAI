@@ -4,8 +4,11 @@ from langchain.prompts.chat import ChatPromptTemplate
 from langchain.tools import tool
 from langchain_openai import AzureChatOpenAI
 from langchain_core.language_models.chat_models import BaseChatModel
+from langchain_core.runnables.history import RunnableWithMessageHistory
+from langchain_core.chat_history import InMemoryChatMessageHistory
 from langchain_core.prompts import ChatPromptTemplate, SystemMessagePromptTemplate , HumanMessagePromptTemplate
 from pydantic import BaseModel, Field, field_validator
+from agents.base import BaseAgent
 from typing import Optional
 from datetime import datetime
 import time
@@ -19,10 +22,18 @@ import pandas as pd
 
 load_dotenv()
 
+def detect_local_environment():
+    """Detect if running locally or in production."""
+    return os.getenv("RUNNING_IN_PRODUCTION") != "true"
 
-class ExtractorAgent:
+def get_chat_history() -> InMemoryChatMessageHistory:
+    return st.session_state['ExtractorHistory']
+
+    
+class ExtractorAgent(BaseAgent):
 
     def __init__(self):
+        super().__init__()
         self.llm = AzureChatOpenAI(
                     azure_endpoint = os.getenv("AZURE_ENDPOINT"),
                     api_key = os.getenv("OPENAI_API_KEY"),  # או פשוט המחרוזת עצמה אם אתה לא רוצה ENV
@@ -30,78 +41,107 @@ class ExtractorAgent:
                     azure_deployment="Diplochat",
                     temperature=0.0,
                 )
+        
         self.tools = [identify_entity_type]
         self.context_agent = initialize_agent(tools = self.tools,llm = self.llm, agent=AgentType.OPENAI_FUNCTIONS,verbose=True)
         self.system_prompt = self.get_system_prompt()
         
+
+    
     def get_system_prompt(self) -> SystemMessagePromptTemplate:
         return SystemMessagePromptTemplate.from_template(
-            """
-            You are a Context Extraction Agent.
+                """
+                You are a Context Extraction and Reasoning Agent.
 
-            Your task is to extract structured insights from the user's question without translating or modifying any entity names.
+                Your job is to:
+                1. Extract structured entities mentioned in the user question.
+                2. Understand the user's analytical intent (Meaning).
+                3. Classify the question into a known analytical category (Question_Type).
 
-            Your output must be a Python dictionary with exactly two keys:
+                ---
 
-            1. "Entities": A list of dictionaries. Each dictionary must have:
-                - type: (Item_Name, Brand_Name, Category_Name, Supplier_Name, Holiday)
-                - name: (preserve exactly the user's input text)
-                - category: (if available; otherwise null)
+                Your output must be a valid Python dictionary with these keys:
+                - "Entities": A list of dictionaries with the following fields:
+                    - type: One of ("Item_Name", "Brand_Name", "Category_Name", "Supplier_Name", "Holiday")
+                    - name: The matched name from the dataset (if found), or the original input.
+                    - category: If available; otherwise do not include.
+                    - metadata: Optional additional notes if relevant (e.g., "multiple items matched").
 
-                Use the 'identify_entity_type' tool if you are unsure about the entity type.
+                - "Meaning": A short plain-English description of what the user wants to analyze.  
+                    Be specific: describe whether a percentage, comparison table, or total value is expected.  
+                    Include all relevant entity names (without translation or modification).
 
-                If the result from the tool is "Unknown":
-                - Do not add that entity to the "Entities" list.
-                - However, still analyze the user's question and produce a "Meaning" description based on the context.
+                - "Question_Type": One of the following:
+                    - "Market_Share_Brand"
+                    - "Market_Share_Item"
+                    - "Market_Share_Brand_Excluding_Supplier"
+                    - "Market_Share_Competitors"
+                    - "Market_Share_Supplier"
+                    - "Top_Selling_Items"
+                    - "Average_Price_By_Chain"
+                    - "Custom" (if none of the above apply)
 
-                Rules:
-                - When the user input contains multiple words:
-                    - First try to match the entire phrase (all words together) in the Item_Name dataset.
-                    - Only if no full match is found, try to match partial words individually.
-                - Always prefer accuracy over guessing.
-                - Always include the 'category' field if available, even if the entity type is Category_Name itself.
+                ---
 
-            2. "Meaning": A clear English description of the user's question.
-                - Always mention entities exactly as they appear, in the original language.
-                - If asking about a single item or brand, mention that the result should be a percentage.
-                - If asking about competitors or multiple items:
-                    - Mention that the result should be a table with relevant columns.
-                    - Explicitly state that each competitor (based on Supplier_Name) should be listed as a separate row in the table.
+                Instructions:
 
-            Important:
-            - Never translate names.
-            - Never omit output format expectations from the Meaning, even if no Entities are detected.
-            - Always return valid Python dictionary syntax.
-            """
-        )
+                - If a supplier is explicitly mentioned in a negative context (e.g., "excluding דיפלומט"), use the `_Excluding_Supplier` version of the Question_Type.
+                - If the question compares דיפלומט to others, use "Market_Share_Competitors".
+                - If the intent is ambiguous but involves a brand or product, default to "Market_Share_Brand".
+                - Never translate any name or phrase.
+                - If you are unsure about the entity type, use the tool `identify_entity_type`.
+                - If no valid entities are found, still return "Meaning" and "Question_Type" based on the user's intent.
+
+                Always return a valid Python dictionary.
+                """
+                )
 
     def response(self, user_question: str, max_retries: int = 5, delay: float = 1.0) -> dict:
-        
         prompt_template = ChatPromptTemplate.from_messages([
             self.system_prompt,
-            HumanMessagePromptTemplate.from_template("{input}")
+            MessagesPlaceholder(variable_name="history"),
+            HumanMessagePromptTemplate.from_template("{user_question}")
         ])
 
-        full_chain = prompt_template | self.context_agent
+        pipeline = prompt_template | self.context_agent
     
+        pipeline_with_history = RunnableWithMessageHistory(
+            pipeline,
+            get_session_history=get_chat_history,
+            history_messages_key="history",
+            input_messages_key="user_question"
+        )
+
+        self.reset_fields()
+        self.set_question(user_question)
+        self.start_timer()
+
         last_error = None
         for attempt in range(1, max_retries + 1):
+            self.increment_attempts()
             try:
-                response = full_chain.invoke({"input": user_question})
-                context = json.dumps(response['output'], ensure_ascii=False, indent=2)
+                self.increment_calls()
+                answer = pipeline_with_history.invoke({"user_question": user_question},config={"session_id": 'ExtractorHistory'})
+                self.stop_timer()
+                context = json.loads(answer['output'])
+                context = json.dumps(context, ensure_ascii=False, separators=(",", ":"))
+                self.set_answer(context)
                 return context
+            
             except RateLimitError as e:
-                last_error = e
                 logging.warning(f"[Retry {attempt}/{max_retries}] Rate limit error: {e}")
-                time.sleep(delay * attempt)  # exponential backoff
+                self.set_error(e)
+
             except Exception as e:
                 logging.error(f"[Attempt {attempt}] Unexpected error: {e}")
+                self.set_error(str(e))
+                self.stop_timer()
                 raise e  # for other exceptions, fail immediately
 
+        self.stop_timer()
         # if we reached here, all retries failed
         raise RuntimeError(f"Failed after {max_retries} retries due to rate limit. Last error: {last_error}")
     
-
 
 
 @tool
@@ -115,14 +155,19 @@ def identify_entity_type(entity_name: str) -> dict:
     4. Partial match in Brand_Name
     5. Partial match in Item_Name
     """
-    stnx_items = st.session_state['Dataframes']['stnx_items']
+
+    if detect_local_environment():
+        stnx_items = pd.read_parquet("parquet_files/DW_DIM_STORENEXT_BY_INDUSTRIES_ITEMS.parquet")
+    else:
+        stnx_items = st.session_state['Dataframes']['stnx_items']
     a = entity_name
     entity_name = entity_name.strip()
 
     result = {
         "type": "Unknown",
         "name": entity_name,
-        "category": None
+        "category": None,
+        "metadata" : None
     }
 
     print(a)
@@ -142,8 +187,10 @@ def identify_entity_type(entity_name: str) -> dict:
 
     # 3. Partial match in Category_Name
     if stnx_items['Category_Name'].str.contains(entity_name, na=False).any():
+        matched = stnx_items[stnx_items['Category_Name'].str.contains(entity_name, na=False)].dropna().iloc[0]
         result["type"] = "Category_Name"
-        result["category"] = entity_name
+        result["name"] = matched['Category_Name']
+        result["category"] = matched['Category_Name']
         return result
 
     # 4. Partial match in Brand_Name
@@ -160,7 +207,14 @@ def identify_entity_type(entity_name: str) -> dict:
         cat = stnx_items.loc[stnx_items['Item_Name'].str.contains(entity_name, na=False), 'Category_Name'].dropna().unique()
         if len(cat) > 0:
             result["category"] = cat[0]
+        number_of_items = stnx_items.loc[stnx_items['Item_Name'].str.contains(entity_name, na=False)]['Barcode'].nunique()
+        if number_of_items > 1:
+            result["metadata"] = f"There are {number_of_items} number that contains that name"
         return result
+    
+    if entity_name in stnx_items['Supplier_Name'].dropna().unique():
+        result = {"type" : "Supplier_Name" , "name": entity_name}
+
 
     return result
 

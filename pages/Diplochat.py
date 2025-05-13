@@ -6,11 +6,10 @@ sys.path.append(str(parent_dir))
 
 from DiploModel import *
 from Dataloader import *
-from MainFunctions import * 
+from MainFunctions import *
 from Homepage import *
 from agents.generator import *
 from agents.decorator import *
-
 import streamlit as st
 from streamlit_navigation_bar import st_navbar
 from streamlit_lottie import st_lottie
@@ -20,18 +19,35 @@ from dotenv import load_dotenv
 import traceback
 import urllib.parse
 import ast
-
+import uuid
+import time
 
 load_css()
+load_dotenv()
 
 if 'page' not in st.session_state:
     st.session_state['page'] = None
+if "Logs" not in st.session_state:
+    st.session_state["Logs"] = pd.DataFrame(columns=["user","timestamp","agent","attempts","calls","error","num_exec","exec_error","retry","duration","question","answer","rating"])
+
 
 if 'Agents' not in st.session_state:
-    st.session_state['Agents'] = {'Generator' : GeneratorAgent() , 'Decorator' : DecoratorAgent()}
+    st.session_state['Agents'] = {'Generator': GeneratorAgent(), 'Decorator': DecoratorAgent()}
+
+if 'Conversation' not in st.session_state:
+    st.session_state['Conversation'] = InMemoryChatMessageHistory()
+
+if "GeneratorHistory" not in st.session_state:
+    st.session_state['GeneratorHistory'] =  InMemoryChatMessageHistory()
+
+if "ExtractorHistory" not in st.session_state:
+    st.session_state['ExtractorHistory'] = InMemoryChatMessageHistory()
 
 if 'Diplochat' not in st.session_state:
     st.session_state['Diplochat'] = DiploChat()
+
+if "Rating" not in st.session_state:
+    st.session_state["Rating"] = 0
 
 if 'Dataloader' not in st.session_state:
     st.session_state['Dataloader'] = DataLoader()
@@ -39,14 +55,8 @@ if 'Dataloader' not in st.session_state:
 if 'Dataframes' not in st.session_state:
     st.session_state['Dataframes'] = None
 
-if "Conversation" not in st.session_state:  
-        st.session_state['Conversation'] = []
-        
-if 'last_prompt_sent' not in st.session_state:
-    st.session_state.last_prompt_sent = None
 
 if "user" not in st.session_state or not st.session_state["user"]:
-
     query_params = st.query_params
     if "user_data" in query_params:
         try:
@@ -58,84 +68,33 @@ if "user" not in st.session_state or not st.session_state["user"]:
 
 
 thinking_animation = load_lottie_file(os.path.join(parent_dir, "progress-animation.json"))
-load_dotenv()
+create_navigation_bar()
 
-    
-pages = ["דף הבית", "הגדרות כלליות"]
-logo_path = os.path.join(parent_dir, "logo.svg")
-
-styles = {
-    "nav": {
-        "background": "linear-gradient(0deg, rgba(239,236,245,1) 0%, rgba(246,246,246,1) 22%, rgba(255,255,255,1) 56%)",
-        "height": "6.25rem",
-        "font-size": "25px",
-        "width": "100%",  # Set the width to 80% of the container
-        "font-family": "Calibri, sans-serif",
-        "direction": "rtl",  # Set direction to RTL
-        "justify-content": "space-between",
-        "box-shadow": "0px 4px 10px rgba(0, 0, 0, 0.3)" # Adds a shadow effect
-
-    },
-    "img": {
-        "height": "7.875rem",
-        "margin-right": "65px",
-    },
-    "li": {
-        "padding": "0 35px",
-        "white-space": "nowrap",
-        "margin-left" : "13px",
-        "transition": "background-color 0.2s, color 0.3s",
-    },
-    "span": {
-        "border-radius": "0.5rem",
-        "color": "#726983",
-        "padding": "0.4375rem 0.625rem",
-        "transition": "background-color 0.2s, color 0.1s"
-    },
-    "active": {
-        "background": "linear-gradient(0deg, rgba(185,166,224,1) 0%, rgba(139,116,186,1) 100%)",
-        "color": "white"
-    },
-    "hover": {
-        "background-color": "#bbb8c1",
-        "color": "white"
-    
-    },
-}
-options = {
-    "show_menu": False,
-    "show_sidebar": False,
-}
-
-st.session_state['page'] = st_navbar(pages,logo_path=logo_path,styles=styles,options=options)
 
 if st.session_state['page'] == 'Home':
     st.write(f"✅ ברוך הבא  {st.session_state['user']['displayName']} !")
     st.write(f"📧 אימייל : {st.session_state['user']['mail']}")
 
 if st.session_state['page'] == 'דף הבית':
-    
     if st.session_state['Dataframes'] is None:
         loader = st.session_state['Dataloader']
         st.session_state['Dataframes'] = load_data_with_progress(loader.parquet_dir)
         time.sleep(0.5)
         st.rerun()
-
-    
-    else:    
-
-        for message in st.session_state['Conversation']:  
-            if message["role"] == 'assistant':  
-                with st.chat_message("assistant"):                   
-                    st.markdown(message["content"], unsafe_allow_html=True)
-
-            elif message["role"] == 'user':  
-                with st.chat_message("user"):     
-                    st.markdown(message["content"])
-
+    else:
+        
+        conversation_history = st.session_state["Conversation"]        
+        if conversation_history:
+            for message in conversation_history.messages:
+                if message.type == 'ai':
+                    with st.chat_message("assistant"):
+                        st.markdown(message.content, unsafe_allow_html=True)
+                elif message.type == 'human':
+                    with st.chat_message("user"):
+                        st.markdown(message.content)
 
         if prompt := st.chat_input("איך אפשר לעזור?"):
-            st.session_state['Conversation'].append({"role": "user", "content": prompt})
+            conversation_history.add_user_message(prompt)
 
             with st.chat_message("user"):
                 st.markdown(prompt)
@@ -150,22 +109,20 @@ if st.session_state['page'] == 'דף הבית':
             with st.chat_message("assistant"):
                 generator_agent = st.session_state['Agents']['Generator']
                 decorator_agent = st.session_state['Agents']['Decorator']
-                
-                answer = generator_agent.response(prompt)
+
+                answer , context = generator_agent.response(prompt)
                 local_scope = get_local_scope()
-                
+
                 max_retries = 15
                 retries = 0
                 success = False
 
                 while not success and retries < max_retries:
                     try:
-
                         exec(answer.python_code, {}, local_scope)
-
                         agent_result = local_scope.get("result", "⚠️ לא נמצאה תשובה.")
-                        st.code(answer.python_code)
-                        decorator_result = decorator_agent.decorate(prompt, answer.python_code_explanation, agent_result)
+                        # st.code(answer.python_code)
+                        decorator_result = decorator_agent.decorate(prompt, agent_result)
 
                         placeholder = st.empty()
                         streamed_text = ""
@@ -174,12 +131,30 @@ if st.session_state['page'] == 'דף הבית':
                             placeholder.markdown(streamed_text, unsafe_allow_html=True)
                             time.sleep(0.01)
 
-                        st.session_state['Conversation'].append({"role": "assistant", "content": decorator_result})
-                        success = True
-                        time.sleep(1)
+                        conversation_history.add_ai_message(decorator_result)
                         
+                        success = True
+                        generator_agent.update_memory(context , prompt , answer , decorator_result) # We need to do that becuase the generator returns pydantic object
+
                     except Exception as e:
+                        
                         retries += 1
                         if retries >= max_retries:
                             st.error(f"❌ נכשל לאחר {max_retries} ניסיונות. שגיאה: {str(e)}")
+                            break
+                        
+                                        
 
+                        
+                        error_message = traceback.format_exc()
+                        generator_agent.set_num_exec(retries)
+                        generator_agent.set_exec_error(e)
+                        generator_agent.set_log("GeneratorAgent", st.session_state["user"]["mail"] , was_retry = True)
+
+                        answer = generator_agent.retry_with_error(user_question = prompt, previous_code = answer.python_code, error_message = error_message)
+
+            if success:
+                generator_agent.set_log("GeneratorAgent", st.session_state["user"]["mail"])
+                decorator_agent.set_log("DecoratorAgent", st.session_state["user"]["mail"])
+                rate_response()
+                
