@@ -30,7 +30,6 @@ if 'page' not in st.session_state:
 if "Logs" not in st.session_state:
     st.session_state["Logs"] = pd.DataFrame(columns=["user","timestamp","agent","attempts","calls","error","num_exec","exec_error","retry","duration","question","answer","rating"])
 
-
 if 'Agents' not in st.session_state:
     st.session_state['Agents'] = {'Generator': GeneratorAgent(), 'Decorator': DecoratorAgent()}
 
@@ -66,6 +65,7 @@ if "user" not in st.session_state or not st.session_state["user"]:
             st.error("❌ שגיאה בשחזור נתוני המשתמש")
             st.stop()
 
+is_admin = st.session_state["user"]["mail"] == "doleva@diplomat-global.com"
 
 thinking_animation = load_lottie_file(os.path.join(parent_dir, "progress-animation.json"))
 create_navigation_bar()
@@ -121,8 +121,9 @@ if st.session_state['page'] == 'דף הבית':
                     try:
                         exec(answer.python_code, {}, local_scope)
                         agent_result = local_scope.get("result", "⚠️ לא נמצאה תשובה.")
-                        # st.code(answer.python_code)
-                        decorator_result = decorator_agent.decorate(prompt, agent_result)
+                        if is_admin:
+                            st.code(answer.python_code)
+                        decorator_result = decorator_agent.decorate(prompt, context , agent_result)
 
                         placeholder = st.empty()
                         streamed_text = ""

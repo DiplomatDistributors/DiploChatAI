@@ -74,13 +74,11 @@ class DecoratorAgent(BaseAgent):
         )
 
 
-    def decorate(self, user_question , result , max_retries: int = 2, delay: float = 1.0) -> dict:
-        
+    def decorate(self, user_question , context , result , max_retries: int = 2, delay: float = 1.0) -> dict:
+        context
         prompt_template = ChatPromptTemplate.from_messages([
             self.system_prompt,
-            HumanMessagePromptTemplate.from_template("user_question: {user_question} \n"
-                                                     "actual output: {result}"  )
-        ])
+            HumanMessagePromptTemplate.from_template("context :{context} \n user_question: {user_question} \n actual output: {result}")])
 
         full_chain = prompt_template | self.llm
     
@@ -93,7 +91,7 @@ class DecoratorAgent(BaseAgent):
             self.increment_attempts()
             try:
                 self.increment_calls()
-                response = full_chain.invoke({"user_question": user_question  , "result" :result})
+                response = full_chain.invoke({"context": context , "user_question": user_question  , "result" :result})
                 self.stop_timer()
                 self.set_answer(response.content)
                 return response.content
