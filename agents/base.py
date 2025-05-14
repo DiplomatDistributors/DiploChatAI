@@ -70,6 +70,6 @@ class BaseAgent:
             "rating" : self.rating
         }
 
-        st.session_state["Logs"] = pd.concat([
-            st.session_state["Logs"], pd.DataFrame([new_row])
-        ], ignore_index=True)
+        st.session_state["Logs"] = pd.concat([st.session_state["Logs"], pd.DataFrame([new_row])], ignore_index=True)
+
+        

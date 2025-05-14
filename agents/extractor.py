@@ -63,13 +63,13 @@ class ExtractorAgent(BaseAgent):
                 Your output must be a valid Python dictionary with these keys:
                 - "Entities": A list of dictionaries with the following fields:
                     - type: One of ("Item_Name", "Brand_Name", "Category_Name", "Supplier_Name", "Holiday")
-                    - name: The matched name from the dataset (if found), or the original input.
+                    - name: The matched name from the dataset (if found by the tool `identify_entity_type`), or the original input.
                     - category: If available; otherwise do not include.
                     - metadata: Optional additional notes if relevant (e.g., "multiple items matched").
 
                 - "Meaning": A short plain-English description of what the user wants to analyze.  
-                    Be specific: describe whether a percentage, comparison table, or total value is expected.  
-                    Include all relevant entity names (without translation or modification).
+                - Be specific: Describe whether a percentage, comparison table, or total value is expected.
+                - Include all relevant entity names (without translation or modification). Unless otherwise determined through your use of the 'identify_entity_type' tool
 
                 - "Question_Type": One of the following:
                     - "Market_Share_Brand"
@@ -146,75 +146,88 @@ class ExtractorAgent(BaseAgent):
 
 @tool
 def identify_entity_type(entity_name: str) -> dict:
-    """
-    Smart identification of entity type.
-    Priority:
-    1. Exact match in Category_Name
-    2. Exact match in Brand_Name
-    3. Partial match in Category_Name
-    4. Partial match in Brand_Name
-    5. Partial match in Item_Name
-    """
+    """ Smart identification of entity type. """
+    entity_name = entity_name.strip()
 
     if detect_local_environment():
         stnx_items = pd.read_parquet("parquet_files/DW_DIM_STORENEXT_BY_INDUSTRIES_ITEMS.parquet")
     else:
         stnx_items = st.session_state['Dataframes']['stnx_items']
-    a = entity_name
-    entity_name = entity_name.strip()
 
     result = {
         "type": "Unknown",
         "name": entity_name,
         "category": None,
-        "metadata" : None
+        "metadata": None
     }
-
-    print(a)
-    # 1. Exact match in Category_Name
+    print(entity_name)
+    # --- 1. Exact match in Category_Name ---
     if entity_name in stnx_items['Category_Name'].dropna().unique():
+        print("exact math in category")
         result["type"] = "Category_Name"
         result["category"] = entity_name
         return result
 
-    # 2. Exact match in Brand_Name
+    # --- 2. Exact match in Brand_Name ---
     if entity_name in stnx_items['Brand_Name'].dropna().unique():
+        print("exact math in brand name")
         result["type"] = "Brand_Name"
         cat = stnx_items.loc[stnx_items['Brand_Name'] == entity_name, 'Category_Name'].dropna().unique()
         if len(cat) > 0:
             result["category"] = cat[0]
         return result
 
-    # 3. Partial match in Category_Name
-    if stnx_items['Category_Name'].str.contains(entity_name, na=False).any():
-        matched = stnx_items[stnx_items['Category_Name'].str.contains(entity_name, na=False)].dropna().iloc[0]
-        result["type"] = "Category_Name"
-        result["name"] = matched['Category_Name']
-        result["category"] = matched['Category_Name']
-        return result
-
-    # 4. Partial match in Brand_Name
-    if stnx_items['Brand_Name'].str.contains(entity_name, na=False).any():
-        result["type"] = "Brand_Name"
-        cat = stnx_items.loc[stnx_items['Brand_Name'].str.contains(entity_name, na=False), 'Category_Name'].dropna().unique()
-        if len(cat) > 0:
-            result["category"] = cat[0]
-        return result
-
-    # 5. Partial match in Item_Name
-    if stnx_items['Item_Name'].str.contains(entity_name, na=False).any():
+    # --- 3. Exact match in Item_Name ---
+    if entity_name in stnx_items['Item_Name'].dropna().unique():
+        print("exact math in item name")
         result["type"] = "Item_Name"
-        cat = stnx_items.loc[stnx_items['Item_Name'].str.contains(entity_name, na=False), 'Category_Name'].dropna().unique()
+        cat = stnx_items.loc[stnx_items['Item_Name'] == entity_name, 'Category_Name'].dropna().unique()
         if len(cat) > 0:
             result["category"] = cat[0]
-        number_of_items = stnx_items.loc[stnx_items['Item_Name'].str.contains(entity_name, na=False)]['Barcode'].nunique()
-        if number_of_items > 1:
-            result["metadata"] = f"There are {number_of_items} number that contains that name"
         return result
-    
-    if entity_name in stnx_items['Supplier_Name'].dropna().unique():
-        result = {"type" : "Supplier_Name" , "name": entity_name}
 
+    # --- 4. Partial match in Category_Name ---
+    partial_cat = stnx_items[stnx_items['Category_Name'].str.contains(entity_name, na=False)]
+    print("partial math in category")
+    if not partial_cat.empty:
+        result["type"] = "Category_Name"
+        result["name"] = partial_cat.iloc[0]['Category_Name']
+        result["category"] = partial_cat.iloc[0]['Category_Name']
+        return result
+
+    # --- 5. Partial match in Brand_Name ---
+    partial_brand = stnx_items[stnx_items['Brand_Name'].str.contains(entity_name, na=False)]
+    if not partial_brand.empty:
+        print("partial math in brand")
+        result["type"] = "Brand_Name"
+        result["name"] = partial_brand.iloc[0]['Brand_Name']
+        cat = partial_brand['Category_Name'].dropna().unique()
+        if len(cat) > 0:
+            result["category"] = cat[0]
+        return result
+
+    # --- 6. Partial match in Item_Name ---
+    partial_item = stnx_items[stnx_items['Item_Name'].str.contains(entity_name, na=False)]
+    if not partial_item.empty:
+        print("partial math in item")
+        result["type"] = "Item_Name"
+        result["name"] = partial_item.iloc[0]['Item_Name']
+        cat = partial_item['Category_Name'].dropna().unique()
+        if len(cat) > 0:
+            result["category"] = cat[0]
+        count = partial_item['Barcode'].nunique()
+        if count > 1:
+            result["metadata"] = f"There are {count} items that contain that phrase"
+        return result
+
+    # --- 7. Exact match in Supplier_Name ---
+    if entity_name in stnx_items['Supplier_Name'].dropna().unique():
+        result = {
+            "type": "Supplier_Name",
+            "name": entity_name,
+            "category": None
+        }
+        return result
 
     return result
 

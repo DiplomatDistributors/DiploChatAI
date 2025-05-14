@@ -30,6 +30,9 @@ if 'page' not in st.session_state:
 if "Logs" not in st.session_state:
     st.session_state["Logs"] = pd.DataFrame(columns=["user","timestamp","agent","attempts","calls","error","num_exec","exec_error","retry","duration","question","answer","rating"])
 
+if 'Last_log' not in st.session_state:
+    st.session_state['Last_log'] = {}
+
 if 'Agents' not in st.session_state:
     st.session_state['Agents'] = {'Generator': GeneratorAgent(), 'Decorator': DecoratorAgent()}
 
@@ -94,6 +97,10 @@ if st.session_state['page'] == 'דף הבית':
                         st.markdown(message.content)
 
         if prompt := st.chat_input("איך אפשר לעזור?"):
+
+            if not st.session_state["Logs"].empty:
+                write_logs_to_sql(st.session_state["Logs"])
+
             conversation_history.add_user_message(prompt)
 
             with st.chat_message("user"):
@@ -144,9 +151,6 @@ if st.session_state['page'] == 'דף הבית':
                             st.error(f"❌ נכשל לאחר {max_retries} ניסיונות. שגיאה: {str(e)}")
                             break
                         
-                                        
-
-                        
                         error_message = traceback.format_exc()
                         generator_agent.set_num_exec(retries)
                         generator_agent.set_exec_error(e)
@@ -158,4 +162,3 @@ if st.session_state['page'] == 'דף הבית':
                 generator_agent.set_log("GeneratorAgent", st.session_state["user"]["mail"])
                 decorator_agent.set_log("DecoratorAgent", st.session_state["user"]["mail"])
                 rate_response()
-                

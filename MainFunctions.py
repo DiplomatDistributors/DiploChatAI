@@ -4,19 +4,12 @@ import pandas as pd
 import base64
 from io import BytesIO
 import matplotlib.pyplot as plt
-import re
-from alive_progress import alive_bar
 from streamlit_elements import elements, mui
-import sys
-from pathlib import Path
 import os
 from streamlit_navigation_bar import st_navbar
-import time
-import msal
 import json
-import requests
-from langchain.memory import ConversationBufferMemory
-from langchain_core.messages import HumanMessage, AIMessage
+from sqlalchemy import create_engine
+import streamlit as st
 
 def load_css():
     st.markdown(
@@ -114,3 +107,29 @@ def rate_response():
                 size="small",
                 precision=1
             )
+
+
+@st.cache_resource
+def get_sql_engine():
+    db_password = os.getenv("DB_PASSWORD")
+    conn_str = (
+        "mssql+pyodbc://analyticsadmin:"
+        f"{db_password}@diplomat-analytics-server.database.windows.net/"
+        "Diplochat-DB?driver=ODBC+Driver+17+for+SQL+Server&charset=utf8"
+    )
+    return create_engine(conn_str, fast_executemany=True)
+
+def write_logs_to_sql(log_df: pd.DataFrame):
+
+    if log_df.empty:
+        return
+
+    engine = get_sql_engine()
+
+    try:
+        log_df.to_sql("logs", con=engine, if_exists="append", index=False)
+        st.session_state["Logs"] = pd.DataFrame(columns=log_df.columns)
+        st.session_state["Rating"] = 0  # אפס דירוג לשאלה הבאה
+
+    except Exception as e:
+        st.error(f"Error on saving rows into logs table {e}")
