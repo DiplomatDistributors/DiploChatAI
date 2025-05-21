@@ -26,8 +26,8 @@ def detect_local_environment():
     """Detect if running locally or in production."""
     return os.getenv("RUNNING_IN_PRODUCTION") != "true"
 
-def get_chat_history() -> InMemoryChatMessageHistory:
-    return st.session_state['ExtractorHistory']
+def get_chat_history(session_id: str) -> InMemoryChatMessageHistory:
+    return st.session_state[session_id]
 
     
 class ExtractorAgent(BaseAgent):
@@ -69,7 +69,7 @@ class ExtractorAgent(BaseAgent):
 
                 - "Meaning": A short plain-English description of what the user wants to analyze.  
                 - Be specific: Describe whether a percentage, comparison table, or total value is expected.
-                - Include all relevant entity names (without translation or modification). Unless otherwise determined through your use of the 'identify_entity_type' tool
+                  Include all relevant entity names (without translation or modification). Unless otherwise determined through your use of the 'identify_entity_type' tool
 
                 - "Question_Type": One of the following:
                     - "Market_Share_Brand"

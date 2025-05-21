@@ -31,9 +31,8 @@ class AnswerStructure(BaseModel):
     
 
 
-def get_chat_history() -> InMemoryChatMessageHistory:
-    return st.session_state['GeneratorHistory']
-
+def get_chat_history(session_id: str) -> InMemoryChatMessageHistory:
+    return st.session_state[session_id]
     
 class GeneratorAgent(BaseAgent):
 

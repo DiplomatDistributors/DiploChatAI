@@ -27,7 +27,7 @@ def get_base64_image(image_path):
         return base64.b64encode(image_file.read()).decode()
 
 def create_navigation_bar():
-    pages = ["דף הבית", "הגדרות כלליות"]
+    pages = ["Home Page", "General Settings"]
     logo_path = "logo.svg"
 
     styles = {
@@ -81,12 +81,96 @@ def load_lottie_file(filepath: str):
     return cleaned_code
 
 def get_local_scope():
+    dataframes = st.session_state['Dataframes']
+    scope = {}
+    if st.session_state.get('aggregation_mode') == 'חודשית':
+        scope = {
+            'chp': dataframes.get('AGGR_MONTHLY_DW_CHP'),
+            'inv_df': dataframes.get('AGGR_MONTHLY_DW_INVOICES'),
+            'stnx_sales': dataframes.get('AGGR_MONTHLY_DW_FACT_STORENEXT_BY_INDUSTRIES_SALES'),
+            'stnx_items': dataframes.get('DW_DIM_STORENEXT_BY_INDUSTRIES_ITEMS'),
+            'customer_df': dataframes.get('DW_DIM_CUSTOMERS', pd.DataFrame()).drop_duplicates(subset=['CUSTOMER_CODE']),
+            'industry_df': dataframes.get('DW_DIM_INDUSTRIES'),
+            'material_df': dataframes.get('DW_DIM_MATERIAL', pd.DataFrame()).drop_duplicates(subset=['MATERIAL_NUMBER']),
+            'dt_df': dataframes.get('DATE_HOLIAY_DATA')
+        }
+    
+    elif st.session_state.get('aggregation_mode') == 'שבועית':
+        scope = {
+            'chp': dataframes.get('AGGR_WEEKLY_DW_CHP'),
+            'inv_df': dataframes.get('AGGR_WEEKLY_DW_INVOICES'),
+            'stnx_sales': dataframes.get('AGGR_WEEKLY_DW_FACT_STORENEXT_BY_INDUSTRIES_SALES'),
+            'stnx_items': dataframes.get('DW_DIM_STORENEXT_BY_INDUSTRIES_ITEMS'),
+            'customer_df': dataframes.get('DW_DIM_CUSTOMERS', pd.DataFrame()).drop_duplicates(subset=['CUSTOMER_CODE']),
+            'industry_df': dataframes.get('DW_DIM_INDUSTRIES'),
+            'material_df': dataframes.get('DW_DIM_MATERIAL', pd.DataFrame()).drop_duplicates(subset=['MATERIAL_NUMBER']),
+            'dt_df': dataframes.get('DATE_HOLIAY_DATA')
+        }
 
-    if 'local_scope' not in st.session_state:
-        st.session_state['local_scope'] = st.session_state['Dataframes']
-        st.session_state['local_scope'].update({'pd':pd,'np':np,'base64':base64,'BytesIO':BytesIO,'plt':plt})
-
+    st.session_state['local_scope'] = scope
+    st.session_state['local_scope'].update({'pd':pd,'np':np,'base64':base64,'BytesIO':BytesIO,'plt':plt})
     return st.session_state['local_scope']
+
+def create_aggregation_option():
+    
+    def set_aggregation_mode(value):
+        st.session_state["aggregation_mode"] = value
+
+    with elements("aggregation_mode_buttons"):
+        mui.Typography(
+            " What level of aggregation would you like to use for the analysis?",
+            variant="subtitle1",
+            sx={
+                "fontFamily": "Calibri",
+                "fontWeight": "bold",
+                "color": "#4A4A68",
+                "marginBottom": "10px",
+                "textAlign": "left",
+                "direction": "ltr"
+            }
+        )
+
+        with mui.Box(
+            sx={
+                "display": "flex",
+                "flexDirection": "row",
+                "gap": "12px",
+                "justifyContent": "flex-start",
+                "marginBottom": "20px",
+                "direction": "ltr",
+                "width": "100%",
+            }
+        ):
+            mui.Button(
+                "Monthly",
+                startIcon=mui.icon.CalendarTodayTwoTone,
+                variant="contained" if st.session_state["aggregation_mode"] == "Monthly" else "outlined",
+                color="secondary",
+                onClick=lambda: set_aggregation_mode("Monthly"),
+                sx={
+                    "minWidth": "100px",
+                    "fontWeight": "bold",
+                    "paddingInline": "10px",
+                    "border": "1px solid #EBE9F0",
+                    "gap": "10px"
+                }
+            )
+
+            mui.Button(
+                "Weekly",
+                startIcon=mui.icon.EventTwoTone,
+                variant="contained" if st.session_state["aggregation_mode"] == "Weekly" else "outlined",
+                color="secondary",
+                onClick=lambda: set_aggregation_mode("Weekly"),
+                sx={
+                    "minWidth": "100px",
+                    "fontWeight": "bold",
+                    "paddingInline": "10px",
+                    "border": "1px solid #EBE9F0",
+                    "gap": "10px"
+                }
+            )
+
 
 def rate_response():
     with elements("rating_section"):
@@ -129,7 +213,7 @@ def write_logs_to_sql(log_df: pd.DataFrame):
     try:
         log_df.to_sql("logs", con=engine, if_exists="append", index=False)
         st.session_state["Logs"] = pd.DataFrame(columns=log_df.columns)
-        st.session_state["Rating"] = 0  # אפס דירוג לשאלה הבאה
+        st.session_state["Rating"] = 0
 
     except Exception as e:
         st.error(f"Error on saving rows into logs table {e}")

@@ -23,6 +23,7 @@ requirements_backup.txt
 
 # Data files
 *.parquet
+*.csv
 parquet_files/
 
 # Temporary folders

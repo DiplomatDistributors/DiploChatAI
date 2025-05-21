@@ -1,5 +1,6 @@
 import sys
 from pathlib import Path
+from st_bridge import bridge , html
 
 parent_dir = Path(__file__).resolve().parent.parent
 sys.path.append(str(parent_dir))
@@ -27,6 +28,7 @@ load_dotenv()
 
 if 'page' not in st.session_state:
     st.session_state['page'] = None
+
 if "Logs" not in st.session_state:
     st.session_state["Logs"] = pd.DataFrame(columns=["user","timestamp","agent","attempts","calls","error","num_exec","exec_error","retry","duration","question","answer","rating"])
 
@@ -36,6 +38,15 @@ if 'Last_log' not in st.session_state:
 if 'Agents' not in st.session_state:
     st.session_state['Agents'] = {'Generator': GeneratorAgent(), 'Decorator': DecoratorAgent()}
 
+if "aggregation_mode" not in st.session_state:
+    st.session_state["aggregation_mode"] = None
+
+if "local_scope" not in st.session_state:
+    st.session_state["local_scope"] = {}
+
+if "last_scope_mode" not in st.session_state:
+    st.session_state["last_scope_mode"] = None
+    
 if 'Conversation' not in st.session_state:
     st.session_state['Conversation'] = InMemoryChatMessageHistory()
 
@@ -75,18 +86,23 @@ create_navigation_bar()
 
 
 if st.session_state['page'] == 'Home':
-    st.write(f"✅ ברוך הבא  {st.session_state['user']['displayName']} !")
-    st.write(f"📧 אימייל : {st.session_state['user']['mail']}")
+    st.write(f"✅ Wellcome {st.session_state['user']['displayName']} !")
+    st.write(f"📧 Email : {st.session_state['user']['mail']}")
 
-if st.session_state['page'] == 'דף הבית':
+if st.session_state['page'] == "Home Page":
+    
+    
     if st.session_state['Dataframes'] is None:
         loader = st.session_state['Dataloader']
-        st.session_state['Dataframes'] = load_data_with_progress(loader.parquet_dir)
+        st.session_state['Dataframes'] = load_data_with_progress()
         time.sleep(0.5)
         st.rerun()
+    
+    
     else:
-        
-        conversation_history = st.session_state["Conversation"]        
+        create_aggregation_option()
+        conversation_history = st.session_state["Conversation"]   
+             
         if conversation_history:
             for message in conversation_history.messages:
                 if message.type == 'ai':
@@ -96,10 +112,10 @@ if st.session_state['page'] == 'דף הבית':
                     with st.chat_message("user"):
                         st.markdown(message.content)
 
-        if prompt := st.chat_input("איך אפשר לעזור?"):
-
-            if not st.session_state["Logs"].empty:
-                write_logs_to_sql(st.session_state["Logs"])
+        if not st.session_state["Logs"].empty:
+            write_logs_to_sql(st.session_state["Logs"])
+            
+        if prompt := st.chat_input("?How can i assist you"):
 
             conversation_history.add_user_message(prompt)
 
