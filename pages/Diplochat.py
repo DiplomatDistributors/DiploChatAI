@@ -94,7 +94,7 @@ if st.session_state['page'] == "Home Page":
     
     if st.session_state['Dataframes'] is None:
         loader = st.session_state['Dataloader']
-        st.session_state['Dataframes'] = load_data_with_progress()
+        st.session_state['Dataframes'] = load_data_with_progress(loader.parquet_dir)
         time.sleep(0.5)
         st.rerun()
     
