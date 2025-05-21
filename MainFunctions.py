@@ -83,7 +83,7 @@ def load_lottie_file(filepath: str):
 def get_local_scope():
     dataframes = st.session_state['Dataframes']
     scope = {}
-    if st.session_state.get('aggregation_mode') == 'חודשית':
+    if st.session_state.get('aggregation_mode') == 'Monthly':
         scope = {
             'chp': dataframes.get('AGGR_MONTHLY_DW_CHP'),
             'inv_df': dataframes.get('AGGR_MONTHLY_DW_INVOICES'),
@@ -95,7 +95,7 @@ def get_local_scope():
             'dt_df': dataframes.get('DATE_HOLIAY_DATA')
         }
     
-    elif st.session_state.get('aggregation_mode') == 'שבועית':
+    elif st.session_state.get('aggregation_mode') == 'Weekly':
         scope = {
             'chp': dataframes.get('AGGR_WEEKLY_DW_CHP'),
             'inv_df': dataframes.get('AGGR_WEEKLY_DW_INVOICES'),
