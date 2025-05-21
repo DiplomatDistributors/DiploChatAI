@@ -152,7 +152,7 @@ def identify_entity_type(entity_name: str) -> dict:
     if detect_local_environment():
         stnx_items = pd.read_parquet("parquet_files/DW_DIM_STORENEXT_BY_INDUSTRIES_ITEMS.parquet")
     else:
-        stnx_items = st.session_state['Dataframes']['stnx_items']
+        stnx_items = st.session_state['Dataframes']['DW_DIM_STORENEXT_BY_INDUSTRIES_ITEMS']
 
     result = {
         "type": "Unknown",
