@@ -124,30 +124,31 @@ if st.session_state['page'] == "Home Page":
 
             thinking_placeholder = st.empty()
             with thinking_placeholder:
-                st_lottie(thinking_animation, height=70, key="loading")
+                st_lottie(thinking_animation, height=150, key="loading")
 
-            time.sleep(1.5)
-            thinking_placeholder.empty()
 
-            with st.chat_message("assistant"):
-                generator_agent = st.session_state['Agents']['Generator']
-                decorator_agent = st.session_state['Agents']['Decorator']
+            generator_agent = st.session_state['Agents']['Generator']
+            decorator_agent = st.session_state['Agents']['Decorator']
 
-                answer , context = generator_agent.response(prompt)
-                local_scope = get_local_scope()
+            answer , context = generator_agent.response(prompt)
+            local_scope = get_local_scope()
 
-                max_retries = 15
-                retries = 0
-                success = False
+            max_retries = 15
+            retries = 0
+            success = False
 
-                while not success and retries < max_retries:
-                    try:
-                        exec(answer.python_code, {}, local_scope)
-                        agent_result = local_scope.get("result", "⚠️ לא נמצאה תשובה.")
-                        if is_admin:
-                            st.code(answer.python_code)
-                        decorator_result = decorator_agent.decorate(prompt, context , agent_result)
+            while not success and retries < max_retries:
+                try:
+                    exec(answer.python_code, {}, local_scope)
+                    agent_result = local_scope.get("result", "⚠️ לא נמצאה תשובה.")
+                    if is_admin:
+                        st.code(answer.python_code)
+                    decorator_result = decorator_agent.decorate(prompt, context , agent_result)
+                    
+                    thinking_placeholder.empty()
 
+                    with st.chat_message("assistant"):
+                    
                         placeholder = st.empty()
                         streamed_text = ""
                         for char in decorator_result:
@@ -160,25 +161,21 @@ if st.session_state['page'] == "Home Page":
                         success = True
                         generator_agent.update_memory(context , prompt , answer , decorator_result) # We need to do that becuase the generator returns pydantic object
 
-                    except Exception as e:
-                        
-                        retries += 1
-                        if retries >= max_retries:
-                            st.error(f"❌ נכשל לאחר {max_retries} ניסיונות. שגיאה: {str(e)}")
-                            break
-                        
-                        error_message = traceback.format_exc()
-                        generator_agent.set_num_exec(retries)
-                        generator_agent.set_exec_error(e)
-                        generator_agent.set_log("GeneratorAgent", st.session_state["user"]["mail"] , was_retry = True)
+                except Exception as e:
+                    
+                    retries += 1
+                    if retries >= max_retries:
+                        st.error(f"❌ נכשל לאחר {max_retries} ניסיונות. שגיאה: {str(e)}")
+                        break
+                    
+                    error_message = traceback.format_exc()
+                    generator_agent.set_num_exec(retries)
+                    generator_agent.set_exec_error(e)
+                    generator_agent.set_log("GeneratorAgent", st.session_state["user"]["mail"] , was_retry = True)
 
-                        answer = generator_agent.retry_with_error(user_question = prompt, previous_code = answer.python_code, error_message = error_message)
+                    answer = generator_agent.retry_with_error(user_question = prompt, previous_code = answer.python_code, error_message = error_message)
 
             if success:
                 generator_agent.set_log("GeneratorAgent", st.session_state["user"]["mail"])
                 decorator_agent.set_log("DecoratorAgent", st.session_state["user"]["mail"])
                 rate_response()
-
-if st.session_state['Dataframes'] is not None:
-    st.write(st.session_state['Dataframes'])
-    st.write(st.session_state['Dataframes'].keys())

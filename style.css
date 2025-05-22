@@ -1,56 +1,64 @@
 
 body {
-    direction: rtl;
-    font-family: "Calibri", sans-serif;
-    margin: 0;
-    padding: 0;
-  }
+  direction: rtl;
+  font-family: "Calibri", sans-serif;
+  margin: 0;
+  padding: 0;
+}
 div[data-testid="collapsedControl"] {
-    display: none
+  display: none
 }
 div[data-testid="stSidebar"] {
-    display: none !important;
-  }
+  display: none !important;
+}
 
 div[data-testid="stSidebarNav"] {
-    display: none !important;
-  }
+  display: none !important;
+}
 
 div[data-testid="stSidebarContent"] {
-    display: none !important;
+  display: none !important;
 }
 
 div[data-testid="stToolbar"] {
-    visibility: hidden;
-    height: 0;
-    position: fixed;
-  }
-  
-  div[data-testid="stDecoration"] {
-    visibility: hidden;
-    height: 0;
-    position: fixed;
-  }
-  div[data-testid="stStatusWidget"] {
-    visibility: hidden;
-    height: 0;
-    position: fixed;
-  }
-  #MainMenu {
-    visibility: hidden;
-    height: 0;
-  }
-  header {
-    visibility: hidden;
-    height: 0;
-  }
-  footer {
-    visibility: hidden;
-    height: 0;
-  }
-  
-  .main {
-    top: 65px !important; /* Adjust this value to move the content further down or up */
-    position: absolute;
-  }
- 
+  visibility: hidden;
+  height: 0;
+  position: fixed;
+}
+
+div[data-testid="stDecoration"] {
+  visibility: hidden;
+  height: 0;
+  position: fixed;
+}
+div[data-testid="stStatusWidget"] {
+  visibility: hidden;
+  height: 0;
+  position: fixed;
+}
+#MainMenu {
+  visibility: hidden;
+  height: 0;
+}
+header {
+  visibility: hidden;
+  height: 0;
+}
+footer {
+  visibility: hidden;
+  height: 0;
+}
+
+section.main {
+top: 65px !important;
+position: relative;
+}
+
+@media screen and (max-width: 768px) {
+section.main {
+  top: 50px !important;
+  padding: 0 0.5rem;
+  font-size: 0.9rem;
+}
+}
+
