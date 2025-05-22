@@ -29,18 +29,18 @@ TEMP_DIR = tempfile.gettempdir()
 def download_blob(blob_name):
     download_path = os.path.join(TEMP_DIR, blob_name)
     if os.path.exists(download_path):
-        print(f"[SKIP] כבר קיים: {blob_name}")
+        print(f"[INFO] כבר קיים מקומית: {blob_name}")
         return download_path
     try:
         print(f"[INFO] מוריד {blob_name}...")
         blob_client = container_client.get_blob_client(blob_name)
-        data = blob_client.download_blob().readall()  # יותר מהיר מ־readinto
         with open(download_path, "wb") as f:
-            f.write(data)
-        print(f"[SUCCESS] {blob_name}")
+            blob_data = blob_client.download_blob()
+            blob_data.readinto(f)
+        print(f"[SUCCESS] נשמר ל: {download_path}")
         return download_path
     except Exception as e:
-        print(f"[ERROR] {blob_name}: {e}")
+        print(f"[ERROR] כשל בהורדה של {blob_name}: {e}")
         return None
 
 def preload_all_blobs():
