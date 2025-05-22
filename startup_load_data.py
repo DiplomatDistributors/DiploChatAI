@@ -6,9 +6,10 @@ from azure.storage.blob import BlobServiceClient
 # שליפת מחרוזת החיבור
 BLOB_CONNECTION_STRING = os.getenv("AZURE_STORAGE_CONNECTION_STRING")
 CONTAINER_NAME = "data"
+
 # שמות הקבצים הדרושים בפועל לפי הקוד שלך
 BLOB_FILE_NAMES = [
-    "AGGR_MONTHLY_DW_CHP.parquet"
+    "AGGR_MONTHLY_DW_CHP.parquet",
     "AGGR_MONTHLY_DW_FACT_STORENEXT_BY_INDUSTRIES_SALES.parquet",
     "AGGR_MONTHLY_DW_INVOICES.parquet",
 
