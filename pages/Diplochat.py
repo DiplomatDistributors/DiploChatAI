@@ -178,3 +178,7 @@ if st.session_state['page'] == "Home Page":
                 generator_agent.set_log("GeneratorAgent", st.session_state["user"]["mail"])
                 decorator_agent.set_log("DecoratorAgent", st.session_state["user"]["mail"])
                 rate_response()
+
+if st.session_state['Dataframes'] is not None:
+    st.write(st.session_state['Dataframes'])
+    st.write(st.session_state['Dataframes'].keys())
