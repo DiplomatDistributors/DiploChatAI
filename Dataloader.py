@@ -108,13 +108,11 @@ def read_parquet_file(file_path):
 
 @st.cache_resource
 def load_data_with_progress(parquet_dir: str):
-    """Load parquet files with a Streamlit progress bar, cached and parallelized."""
+    """Load parquet files with Streamlit progress bar (excluding vector_database.parquet)."""
     dataframes = {}
-    files = [f for f in os.listdir(parquet_dir) if f.endswith(".parquet")]
-    total_files = len(files)
+    files = [f for f in os.listdir(parquet_dir) if f.endswith(".parquet") and f != "vector_database.parquet"]
 
-    # Use ThreadPoolExecutor to parallelize reading
-    with concurrent.futures.ThreadPoolExecutor(max_workers=3) as executor:
+    with concurrent.futures.ThreadPoolExecutor(max_workers=4) as executor:
         futures = {}
         for file_name in files:
             file_path = os.path.join(parquet_dir, file_name)
@@ -126,36 +124,20 @@ def load_data_with_progress(parquet_dir: str):
                 key = file_name.replace(".parquet", "")
                 dataframes[key] = df
 
+    # Load date table if needed
     if 'AGGR_WEEKLY_DW_FACT_STORENEXT_BY_INDUSTRIES_SALES' in dataframes:
         loader = DataLoader()
         start_date = dataframes['AGGR_WEEKLY_DW_FACT_STORENEXT_BY_INDUSTRIES_SALES']['Day'].min()
         end_date = dataframes['AGGR_WEEKLY_DW_FACT_STORENEXT_BY_INDUSTRIES_SALES']['Day'].max()
-        dt_df = loader.create_date_dataframe(start_date, end_date)
-        dataframes['DATE_HOLIAY_DATA'] = dt_df
+        dataframes['DATE_HOLIAY_DATA'] = loader.create_date_dataframe(start_date, end_date)
 
-
-    st.success("✅ All data are uploaded successfully")
-    time.sleep(1)
-    # Add dates dataframe
-    
+    st.success("✅ Main data loaded successfully")
     return dataframes
 
-@st.cache_resource
-def get_vector_database():
-    # Load entity table with embeddings
-    stnx_entities = pd.read_parquet("embeddings/stnx_entities.parquet")
-    chp_entities = pd.read_parquet("embeddings/chp_entities.parquet")
-    customer_entities = pd.read_parquet("embeddings/customer_entities.parquet")
-    combined_entities = pd.concat([stnx_entities, chp_entities,customer_entities], ignore_index=True)
 
-    def clean_and_tag_metadata(row):
-        meta = row.get("metadata", {})
-        if isinstance(meta, dict):
-            cleaned_meta = {k: v for k, v in meta.items() if v is not None}
-            cleaned_meta["source_table"] = row.get("source_table")
-            cleaned_meta["column"] = row.get("type")
-            return cleaned_meta
-        return {}
-
-    combined_entities["metadata"] = combined_entities.apply(clean_and_tag_metadata, axis=1)
-    return combined_entities
+def load_vector_database(parquet_dir: str):
+    path = os.path.join(parquet_dir, "vector_database.parquet")
+    df = read_parquet_file(path)
+    if df is not None:
+        st.success("✅ Vector database loaded")
+    return df

@@ -90,8 +90,8 @@ if st.session_state['page'] == "Home Page":
             
         else:    
             st.session_state['Dataframes'] = load_data_with_progress(loader.parquet_dir)
-
-        st.session_state['Agents']['ExtractorAgent'] = ExtractorAgent(st.session_state['Dataframes']['vector_database'])
+        vector_database = load_vector_database(loader.parquet_dir)
+        st.session_state['Agents']['ExtractorAgent'] = ExtractorAgent(vector_database)
         st.session_state['Agents']['PlannerAgent'] = PlannerAgent()
         st.session_state['Agents']['GeneratorAgent'] = GeneratorAgent()
         st.session_state['Agents']['DecoratorAgent'] = DecoratorAgent()
