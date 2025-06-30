@@ -114,7 +114,10 @@ def load_data_with_progress(parquet_dir: str):
     "vector_database.parquet",
     "stnx_entities_meta.parquet",
     "chp_entities_meta.parquet",
-    "customer_entities_meta.parquet"
+    "customer_entities_meta.parquet",
+    "AGGR_WEEKLY_DW_CHP.parquet",
+    "AGGR_WEEKLY_DW_FACT_STORENEXT_BY_INDUSTRIES_SALES.parquet",
+    "AGGR_WEEKLY_DW_INVOICES.parquet"
     }
 
     dataframes = {}
