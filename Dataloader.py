@@ -136,12 +136,9 @@ def load_data_with_progress(parquet_dir: str):
 
 
 def load_vector_database(parquet_dir: str):
-    path = os.path.join(parquet_dir, "stnx_entities.parquet")
-    stnx_entities = read_parquet_file(path)
-    path = os.path.join(parquet_dir, "chp_entities.parquet")
-    chp_entities = read_parquet_file(path)
-    path = os.path.join(parquet_dir, "customer_entities.parquet")
-    customer_entities = read_parquet_file(path)
+    stnx_entities = st.session_state['DataFrames']['stnx_entities']
+    chp_entities = st.session_state['DataFrames']['chp_entities.parquet']
+    customer_entities = st.session_state['DataFrames']['customer_entities.parquet']
     combined_entities = pd.concat([stnx_entities, chp_entities,customer_entities], ignore_index=True)
 
     def clean_and_tag_metadata(row):
