@@ -16,8 +16,7 @@ BLOB_FILE_NAMES = [
     "DW_DIM_STORENEXT_BY_INDUSTRIES_ITEMS.parquet",
     "DW_DIM_CUSTOMERS.parquet",
     "DW_DIM_INDUSTRIES.parquet",
-    "DW_DIM_MATERIAL.parquet",
-    "vector_database.parquet"
+    "DW_DIM_MATERIAL.parquet"
 ]
 
 blob_service_client = BlobServiceClient.from_connection_string(BLOB_CONNECTION_STRING)
