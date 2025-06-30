@@ -24,6 +24,7 @@ import urllib.parse
 import ast
 import uuid
 import time
+import json
 
 load_css()
 load_dotenv()
@@ -131,7 +132,7 @@ if st.session_state['page'] == "Home Page":
             decorator_agent = st.session_state['Agents']['DecoratorAgent']
 
             entities = extracor_agent.response(prompt)
-            plan = planner_agent.response(prompt , entities)
+            plan = planner_agent.response(prompt, json.dumps(entities, ensure_ascii=False))
             answer = generator_agent.response(plan , prompt)
 
             local_scope = get_local_scope()
