@@ -299,6 +299,11 @@ class GeneratorAgent(BaseAgent):
                     6. Market share = (Numerator / Denominator) * 100
                     7. If the question implies comparison, return a table showing both included and excluded supplier contributions.
 
+                - If Instructions.PerCategory is true, **you must**:
+                - Identify all unique categories that the barcodes of the brand/item belong to
+                - For each category, calculate the market share (brand sales / total category sales)
+                - Return a table (`result`) with one row per category.
+                                                         
         **Cross-Dataset Linking Instructions**: How to Join `inv_df` to `stnx_sales` or `chp` via Barcodes
 
             - The `inv_df` dataset uses `MATERIAL_CODE` (internal material ID) to identify products, while `stnx_sales` and `chp` use consumer-facing `Barcode` values.
@@ -368,7 +373,7 @@ class GeneratorAgent(BaseAgent):
         **Additional Instructions for Comparative Analyses:**
             - When the question involves multiple competitors, brands, categories, or products:
                 - Always construct a structured table where each row corresponds to a different entity (Supplier_Name, Brand_Name, etc.).
-                - For each entity, present the requested metrics (e.g., Sales_NIS, Market Share (%), Units Sold, Average Price).
+                - For each entity, present the requested metrics.
                 - Only aggregate values across entities if the user explicitly requests an overall total.
                 - Prefer clear, descriptive column names, and sort the table if a ranking is implied.           
 

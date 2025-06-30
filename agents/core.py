@@ -73,20 +73,20 @@ def search_entities_in_vdb_core(names, embedding_model, combined_entities):
         matches = merged_brand_matches + plain_matches
         matches.sort(key=lambda m: m["score"], reverse=True)
 
-        brand_matches = [entity for entity in matches if entity["type"] == "Brand_Name"]
-        item_matches = [entity for entity in matches if entity["type"] == "Item_Name"]
-        other_matches = [entity for entity in matches if entity["type"] not in {"Brand_Name", "Item_Name"}]
+        # brand_matches = [entity for entity in matches if entity["type"] == "Brand_Name"]
+        # item_matches = [entity for entity in matches if entity["type"] == "Item_Name"]
+        # other_matches = [entity for entity in matches if entity["type"] not in {"Brand_Name", "Item_Name"}]
 
-        if brand_matches and item_matches:
-            top_brand_score = brand_matches[0]["score"]
-            top_item_score = max(entity["score"] for entity in item_matches)
+        # if brand_matches and item_matches:
+        #     top_brand_score = brand_matches[0]["score"]
+        #     top_item_score = max(entity["score"] for entity in item_matches)
 
-            if top_brand_score >= top_item_score:
-                matches = brand_matches + other_matches
-            else:
-                matches = item_matches + other_matches
+        #     if top_brand_score >= top_item_score:
+        #         matches = brand_matches + other_matches
+        #     else:
+        #         matches = item_matches + other_matches
 
-        matches.sort(key=lambda m: m["score"], reverse=True)
+        # matches.sort(key=lambda m: m["score"], reverse=True)
         results.append({"original": name, "matches": matches})
 
     t1 = time.time()

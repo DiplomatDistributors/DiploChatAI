@@ -99,9 +99,8 @@ if st.session_state['page'] == "Home Page":
         st.rerun()
     
     else:
-        create_aggregation_option()
-        conversation_history = st.session_state["Conversation"]   
-             
+
+        conversation_history = st.session_state["Conversation"]                
         if conversation_history:
             for message in conversation_history.messages:
                 if message.type == 'ai':
@@ -146,6 +145,7 @@ if st.session_state['page'] == "Home Page":
                     exec(answer.python_code, {}, local_scope)
                     agent_result = local_scope.get("result", "⚠️ לא נמצאה תשובה.")
                     if is_admin:
+                        st.code(entities)
                         st.code(plan)
                         st.code(answer.python_code)
                     decorator_result = decorator_agent.decorate(prompt, plan , agent_result)

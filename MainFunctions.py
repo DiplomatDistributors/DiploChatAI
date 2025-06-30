@@ -87,9 +87,7 @@ def load_lottie_file(filepath: str):
 
 def get_local_scope():
     dataframes = st.session_state['Dataframes']
-    scope = {}
-    if st.session_state.get('aggregation_mode') == 'Monthly':
-        scope = {
+    scope = {
             'chp': dataframes.get('AGGR_MONTHLY_DW_CHP'),
             'inv_df': dataframes.get('AGGR_MONTHLY_DW_INVOICES'),
             'stnx_sales': dataframes.get('AGGR_MONTHLY_DW_FACT_STORENEXT_BY_INDUSTRIES_SALES'),
@@ -97,23 +95,8 @@ def get_local_scope():
             'customer_df': dataframes.get('DW_DIM_CUSTOMERS', pd.DataFrame()).drop_duplicates(subset=['CUSTOMER_CODE']),
             'industry_df': dataframes.get('DW_DIM_INDUSTRIES'),
             'material_df': dataframes.get('DW_DIM_MATERIAL', pd.DataFrame()).drop_duplicates(subset=['MATERIAL_NUMBER']),
-            'dt_df': dataframes.get('DATE_HOLIAY_DATA'),
-            'vector_database' : dataframes.get('vector_database')
+            'dt_df': dataframes.get('DATE_HOLIAY_DATA')
         }
-    
-    elif st.session_state.get('aggregation_mode') == 'Weekly':
-        scope = {
-            'chp': dataframes.get('AGGR_WEEKLY_DW_CHP'),
-            'inv_df': dataframes.get('AGGR_WEEKLY_DW_INVOICES'),
-            'stnx_sales': dataframes.get('AGGR_WEEKLY_DW_FACT_STORENEXT_BY_INDUSTRIES_SALES'),
-            'stnx_items': dataframes.get('DW_DIM_STORENEXT_BY_INDUSTRIES_ITEMS'),
-            'customer_df': dataframes.get('DW_DIM_CUSTOMERS', pd.DataFrame()).drop_duplicates(subset=['CUSTOMER_CODE']),
-            'industry_df': dataframes.get('DW_DIM_INDUSTRIES'),
-            'material_df': dataframes.get('DW_DIM_MATERIAL', pd.DataFrame()).drop_duplicates(subset=['MATERIAL_NUMBER']),
-            'dt_df': dataframes.get('DATE_HOLIAY_DATA'),
-            'vector_database' : dataframes.get('vector_database')
-        }
-
     st.session_state['local_scope'] = scope
     st.session_state['local_scope'].update({'pd':pd,'np':np,'base64':base64,'BytesIO':BytesIO,'plt':plt})
     return st.session_state['local_scope']

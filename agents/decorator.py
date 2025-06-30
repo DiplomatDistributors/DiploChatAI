@@ -1,39 +1,38 @@
-from langchain.agents import initialize_agent, AgentType
-from langchain.prompts import SystemMessagePromptTemplate, MessagesPlaceholder, HumanMessagePromptTemplate
-from langchain.prompts.chat import ChatPromptTemplate
-from langchain.tools import tool
+import sys
+from pathlib import Path
+from st_bridge import bridge, html
+
+from langchain.agents import AgentType, initialize_agent
+from langchain.prompts import SystemMessagePromptTemplate, HumanMessagePromptTemplate, ChatPromptTemplate
 from langchain_openai import AzureChatOpenAI
 from langchain_core.language_models.chat_models import BaseChatModel
-from langchain_core.prompts import ChatPromptTemplate, SystemMessagePromptTemplate , HumanMessagePromptTemplate
 from pydantic import BaseModel, Field, field_validator
 from agents.base import BaseAgent
-from typing import Optional
-from datetime import datetime
-import time
-import logging
 from openai import RateLimitError
+
 from dotenv import load_dotenv
 import os
-import json
-import streamlit as st
+import logging
+import time
 import pandas as pd
+from tabulate import tabulate
+import streamlit as st
 
 load_dotenv()
 
 
 class DecoratorAgent(BaseAgent):
-
     def __init__(self):
         self.llm = AzureChatOpenAI(
-                    azure_endpoint = os.getenv("AZURE_ENDPOINT"),
-                    api_key = os.getenv("OPENAI_API_KEY"),  # או פשוט המחרוזת עצמה אם אתה לא רוצה ENV
-                    api_version="2024-08-01-preview",
-                    azure_deployment="Diplochat",
-                    temperature=0.0,
-                    streaming=True
-                )
+            azure_endpoint=os.getenv("AZURE_ENDPOINT"),
+            api_key=os.getenv("OPENAI_API_KEY"),
+            api_version="2024-08-01-preview",
+            azure_deployment="Diplochat",
+            temperature=0.0,
+            streaming=True
+        )
         self.system_prompt = self.get_system_prompt()
-        
+
     def get_system_prompt(self) -> SystemMessagePromptTemplate:
         return SystemMessagePromptTemplate.from_template(
             """
@@ -73,15 +72,20 @@ class DecoratorAgent(BaseAgent):
             """
         )
 
+    def decorate(self, user_question, context, result, max_retries: int = 2, delay: float = 1.0) -> str:
+        # Handle DataFrame formatting if needed
+        if isinstance(result, pd.DataFrame):
+            result_markdown = tabulate(result, headers="keys", tablefmt="pipe", showindex=False, floatfmt=".2f")
+        else:
+            result_markdown = str(result)
 
-    def decorate(self, user_question , context , result , max_retries: int = 2, delay: float = 1.0) -> dict:
-        context
         prompt_template = ChatPromptTemplate.from_messages([
             self.system_prompt,
-            HumanMessagePromptTemplate.from_template("context :{context} \n user_question: {user_question} \n actual output: {result}")])
+            HumanMessagePromptTemplate.from_template("context :{context} \n user_question: {user_question} \n actual output: {result}")
+        ])
 
         full_chain = prompt_template | self.llm
-    
+
         self.reset_fields()
         self.set_question(user_question)
         self.start_timer()
@@ -91,22 +95,25 @@ class DecoratorAgent(BaseAgent):
             self.increment_attempts()
             try:
                 self.increment_calls()
-                response = full_chain.invoke({"context": context , "user_question": user_question  , "result" :result})
+                response = full_chain.invoke({
+                    "context": context,
+                    "user_question": user_question,
+                    "result": result_markdown
+                })
                 self.stop_timer()
                 self.set_answer(response.content)
                 return response.content
-            
+
             except RateLimitError as e:
                 logging.warning(f"[Retry {attempt}/{max_retries}] Rate limit error: {e}")
                 self.set_error(e)
+                time.sleep(delay)
 
             except Exception as e:
                 logging.error(f"[Attempt {attempt}] Unexpected error: {e}")
                 self.set_error(str(e))
                 self.stop_timer()
-                raise e  # for other exceptions, fail immediately
+                raise e  # fail fast for unexpected exceptions
 
         self.stop_timer()
-        # if we reached here, all retries failed
         raise RuntimeError(f"Failed after {max_retries} retries due to rate limit. Last error: {last_error}")
-    

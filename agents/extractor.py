@@ -86,7 +86,7 @@ class ExtractorAgent(BaseAgent):
         - Distributors or suppliers (e.g., דיפלומט)
         - Specific product names (multi-word)
         - Keep compound names intact (e.g., "פרינגלס שמנת בצל").
-        - DO NOT include words like 'customer', 'profit', 'רווח', 'לקוח' or generic descriptors.
+        - DO NOT include words like 'customer', 'profit', 'רווח', 'לקוח', 'מוצר' or generic descriptors.
         - If any extracted name is written in English or other non-Hebrew languages, translate it into Hebrew before calling the tool.
         - Call the tool `search_entities_in_vdb` with the final list of names.
 
