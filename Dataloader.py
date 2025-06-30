@@ -114,7 +114,7 @@ def load_data_with_progress(parquet_dir: str):
     total_files = len(files)
 
     # Use ThreadPoolExecutor to parallelize reading
-    with concurrent.futures.ThreadPoolExecutor(max_workers=16) as executor:
+    with concurrent.futures.ThreadPoolExecutor(max_workers=3) as executor:
         futures = {}
         for file_name in files:
             file_path = os.path.join(parquet_dir, file_name)
