@@ -132,6 +132,7 @@ def load_data_with_progress(parquet_dir: str):
         dataframes['DATE_HOLIAY_DATA'] = loader.create_date_dataframe(start_date, end_date)
 
     st.success("✅ Main data loaded successfully")
+    print(dataframes.keys())
     return dataframes
 
 
