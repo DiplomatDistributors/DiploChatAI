@@ -73,34 +73,23 @@ logo_base64 = get_base64_image("MainLogo.svg")
 background_base64 = get_base64_image("Backg.jpg")
 
 with elements("home_page"):
-    with mui.Box(
+    with mui.Box(  # עטיפה חיצונית למרכז הכל
         sx={
             "display": "flex",
             "flexDirection": "column",
             "alignItems": "center",
-            "textAlign": "center",
             "justifyContent": "center",
-            "width": "65%", 
-            "margin": "auto",
-            "padding": "40px",
-            "borderRadius": "25px",
-            "boxShadow": "0px 10px 30px rgba(0, 0, 0, 0.05)",
-            "border": "3px solid white",
-            "direction": "rtl",
-            "backgroundImage": f"url('data:image/jpg;base64,{background_base64}')",
-            "backgroundSize": "cover",
-            "backgroundPosition": "center",
-            "minHeight": "250px",
-            "height": "auto",
+            "textAlign": "center"
         }
     ):
         mui.Box(
             component="img",
             src=f"data:image/svg+xml;base64,{logo_base64}",
             sx={
-                "width": 450,
-                "height": 300,
-                "marginBottom": "30px",
+                "width": 550,
+                "height": 350,
+                "marginBottom": "5px",
+                "borderRadius": "20px"  # אופציונלי, נותן עיגול רך
             }
         )
 
@@ -110,7 +99,8 @@ with elements("home_page"):
             color="secondary",
             onClick=lambda: st.session_state.update({"continue_button": True}),
             sx={
-                "padding": "14px 32px",
+                "marginTop": "5px",
+                "padding": "10px 32px",
                 "minWidth": "100px",
                 "height": "45px",
                 "fontSize": "16px",

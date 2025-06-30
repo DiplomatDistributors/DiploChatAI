@@ -40,6 +40,60 @@ class DataLoader:
         dt_df['HOLIDAY'] = dt_df['DATE'].apply(lambda x: self.get_jewish_holidays(x.year, x.month, x.day))
         return dt_df
 
+def load_selected_parquets(parquet_dir="parquet_files"):
+    """
+    Load specific Parquet files from a given directory.
+
+    Returns:
+        dict[str, pd.DataFrame]: Dictionary of DataFrames keyed by filename (without .parquet).
+    """
+    selected_files = [
+    "AGGR_MONTHLY_DW_CHP.parquet",
+    "AGGR_MONTHLY_DW_FACT_STORENEXT_BY_INDUSTRIES_SALES.parquet",
+    "AGGR_MONTHLY_DW_INVOICES.parquet",
+    "DW_DIM_STORENEXT_BY_INDUSTRIES_ITEMS.parquet",
+    "DW_DIM_CUSTOMERS.parquet",
+    "DW_DIM_INDUSTRIES.parquet",
+    "DW_DIM_MATERIAL.parquet"
+    ]
+
+    dataframes = {}
+
+    # Use ThreadPoolExecutor to parallelize reading
+    with concurrent.futures.ThreadPoolExecutor(max_workers=4) as executor:
+        futures = {}
+        for file_name in selected_files:
+            file_path = os.path.join(parquet_dir, file_name)
+            futures[file_name] = executor.submit(read_parquet_file, file_path)
+
+        for i, (file_name, future) in enumerate(futures.items()):
+            df = future.result()
+            print(f"✅ Loaded {file_name:<60} → {df.shape[0]:,} rows")
+            if df is not None:
+                key = file_name.replace(".parquet", "")
+                dataframes[key] = df
+
+    # Load entity table with embeddings
+    stnx_entities = pd.read_parquet("embeddings/stnx_entities.parquet")
+    chp_entities = pd.read_parquet("embeddings/chp_entities.parquet")
+    customer_entities = pd.read_parquet("embeddings/customer_entities.parquet")
+    combined_entities = pd.concat([stnx_entities, chp_entities,customer_entities], ignore_index=True)
+
+    def clean_and_tag_metadata(row):
+        meta = row.get("metadata", {})
+        if isinstance(meta, dict):
+            cleaned_meta = {k: v for k, v in meta.items() if v is not None}
+            cleaned_meta["source_table"] = row.get("source_table")
+            cleaned_meta["column"] = row.get("type")
+            return cleaned_meta
+        return {}
+
+    combined_entities["metadata"] = combined_entities.apply(clean_and_tag_metadata, axis=1)
+    dataframes['vector_database'] = combined_entities
+    
+    return dataframes
+
+
 def read_parquet_file(file_path):
     """Helper function to read a parquet file."""
     try:
@@ -85,3 +139,23 @@ def load_data_with_progress(parquet_dir: str):
     # Add dates dataframe
     
     return dataframes
+
+@st.cache_resource
+def get_vector_database():
+    # Load entity table with embeddings
+    stnx_entities = pd.read_parquet("embeddings/stnx_entities.parquet")
+    chp_entities = pd.read_parquet("embeddings/chp_entities.parquet")
+    customer_entities = pd.read_parquet("embeddings/customer_entities.parquet")
+    combined_entities = pd.concat([stnx_entities, chp_entities,customer_entities], ignore_index=True)
+
+    def clean_and_tag_metadata(row):
+        meta = row.get("metadata", {})
+        if isinstance(meta, dict):
+            cleaned_meta = {k: v for k, v in meta.items() if v is not None}
+            cleaned_meta["source_table"] = row.get("source_table")
+            cleaned_meta["column"] = row.get("type")
+            return cleaned_meta
+        return {}
+
+    combined_entities["metadata"] = combined_entities.apply(clean_and_tag_metadata, axis=1)
+    return combined_entities

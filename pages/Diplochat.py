@@ -9,6 +9,8 @@ from DiploModel import *
 from Dataloader import *
 from MainFunctions import *
 from Homepage import *
+from agents.extractor import *
+from agents.planner import *
 from agents.generator import *
 from agents.decorator import *
 import streamlit as st
@@ -35,9 +37,6 @@ if "Logs" not in st.session_state:
 if 'Last_log' not in st.session_state:
     st.session_state['Last_log'] = {}
 
-if 'Agents' not in st.session_state:
-    st.session_state['Agents'] = {'Generator': GeneratorAgent(), 'Decorator': DecoratorAgent()}
-
 if "aggregation_mode" not in st.session_state:
     st.session_state["aggregation_mode"] = None
 
@@ -50,15 +49,6 @@ if "last_scope_mode" not in st.session_state:
 if 'Conversation' not in st.session_state:
     st.session_state['Conversation'] = InMemoryChatMessageHistory()
 
-if "GeneratorHistory" not in st.session_state:
-    st.session_state['GeneratorHistory'] =  InMemoryChatMessageHistory()
-
-if "ExtractorHistory" not in st.session_state:
-    st.session_state['ExtractorHistory'] = InMemoryChatMessageHistory()
-
-if 'Diplochat' not in st.session_state:
-    st.session_state['Diplochat'] = DiploChat()
-
 if "Rating" not in st.session_state:
     st.session_state["Rating"] = 0
 
@@ -68,6 +58,8 @@ if 'Dataloader' not in st.session_state:
 if 'Dataframes' not in st.session_state:
     st.session_state['Dataframes'] = None
 
+if 'Agents' not in st.session_state:
+    st.session_state['Agents'] = {}
 
 if "user" not in st.session_state or not st.session_state["user"]:
     query_params = st.query_params
@@ -91,13 +83,20 @@ if st.session_state['page'] == 'Home':
 
 if st.session_state['page'] == "Home Page":
     
-    
     if st.session_state['Dataframes'] is None:
         loader = st.session_state['Dataloader']
-        st.session_state['Dataframes'] = load_data_with_progress(loader.parquet_dir)
-        time.sleep(0.5)
+        if loader.running_local:
+            st.session_state['Dataframes'] = load_selected_parquets()
+            
+        else:    
+            st.session_state['Dataframes'] = load_data_with_progress(loader.parquet_dir)
+
+        st.session_state['Agents']['ExtractorAgent'] = ExtractorAgent(st.session_state['Dataframes']['vector_database'])
+        st.session_state['Agents']['PlannerAgent'] = PlannerAgent()
+        st.session_state['Agents']['GeneratorAgent'] = GeneratorAgent()
+        st.session_state['Agents']['DecoratorAgent'] = DecoratorAgent()
+        time.sleep(0.15)
         st.rerun()
-    
     
     else:
         create_aggregation_option()
@@ -115,7 +114,7 @@ if st.session_state['page'] == "Home Page":
         if not st.session_state["Logs"].empty:
             write_logs_to_sql(st.session_state["Logs"])
             
-        if prompt := st.chat_input("?How can i assist you"):
+        if prompt := st.chat_input("How can i assist you?"):
 
             conversation_history.add_user_message(prompt)
 
@@ -127,10 +126,15 @@ if st.session_state['page'] == "Home Page":
                 st_lottie(thinking_animation, height=150, key="loading")
 
 
-            generator_agent = st.session_state['Agents']['Generator']
-            decorator_agent = st.session_state['Agents']['Decorator']
+            extracor_agent = st.session_state['Agents']['ExtractorAgent']
+            planner_agent =  st.session_state['Agents']['PlannerAgent']
+            generator_agent = st.session_state['Agents']['GeneratorAgent']
+            decorator_agent = st.session_state['Agents']['DecoratorAgent']
 
-            answer , context = generator_agent.response(prompt)
+            entities = extracor_agent.response(prompt)
+            plan = planner_agent.response(prompt , entities)
+            answer = generator_agent.response(plan , prompt)
+
             local_scope = get_local_scope()
 
             max_retries = 15
@@ -142,8 +146,9 @@ if st.session_state['page'] == "Home Page":
                     exec(answer.python_code, {}, local_scope)
                     agent_result = local_scope.get("result", "⚠️ לא נמצאה תשובה.")
                     if is_admin:
+                        st.code(plan)
                         st.code(answer.python_code)
-                    decorator_result = decorator_agent.decorate(prompt, context , agent_result)
+                    decorator_result = decorator_agent.decorate(prompt, plan , agent_result)
                     
                     thinking_placeholder.empty()
 
@@ -159,7 +164,7 @@ if st.session_state['page'] == "Home Page":
                         conversation_history.add_ai_message(decorator_result)
                         
                         success = True
-                        generator_agent.update_memory(context , prompt , answer , decorator_result) # We need to do that becuase the generator returns pydantic object
+                        generator_agent.update_memory(plan , prompt , answer , decorator_result) # We need to do that becuase the generator returns pydantic object
 
                 except Exception as e:
                     

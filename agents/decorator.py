@@ -53,13 +53,13 @@ class DecoratorAgent(BaseAgent):
                 - For large tables (more than 12 rows), mention that only the top competitors or top results are shown.
                 - Do NOT over-explain the technical process — focus only on the final user-facing result.
             - If the question is about something else (like totals, insights, or single product analysis), adapt the tone accordingly.
-            - Preserve the language of the user's question (Hebrew stays Hebrew, English stays English).
-            - If Hebrew, ensure Right-To-Left (RTL) formatting.
+            - Your answer should be in the user's language. If the user asked a question in English, you should answer in English, or alternatively in Hebrew.
+              Note that you must **treat the data itself as is, except for column names that must be translated into the user's language.**
             - Never invent additional data. Only summarize the received output professionally.
 
             - **When the output includes a table:**
                 - Detect the table and format it cleanly in Markdown.
-                - Automatically translate all column headers into the language of the user's question.
+                - **Automatically translate all column headers into the language of the user's question.**
                 - Remove any underscores ("_") and unnecessary symbols from headers (e.g., "%").
                 - For Hebrew, ensure the column names are formal and properly aligned.
                 - For English, format the headers clearly and professionally in Title Case.

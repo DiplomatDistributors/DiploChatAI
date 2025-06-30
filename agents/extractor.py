@@ -9,6 +9,8 @@ from langchain_core.chat_history import InMemoryChatMessageHistory
 from langchain_core.prompts import ChatPromptTemplate, SystemMessagePromptTemplate , HumanMessagePromptTemplate
 from pydantic import BaseModel, Field, field_validator
 from agents.base import BaseAgent
+from openai import AzureOpenAI
+from typing import List
 from typing import Optional
 from datetime import datetime
 import time
@@ -19,6 +21,11 @@ import os
 import json
 import streamlit as st
 import pandas as pd
+from sklearn.metrics.pairwise import cosine_similarity
+import numpy as np
+from Dataloader import *
+from agents.tools import *
+from collections import defaultdict
 
 load_dotenv()
 
@@ -26,75 +33,75 @@ def detect_local_environment():
     """Detect if running locally or in production."""
     return os.getenv("RUNNING_IN_PRODUCTION") != "true"
 
-def get_chat_history(session_id: str) -> InMemoryChatMessageHistory:
-    return st.session_state[session_id]
+
+global_chat_map = {}
+def get_chat_history(session_id: str, use_streamlit: bool = True) -> InMemoryChatMessageHistory:
+    """
+    Get memory based on environment.
+    If use_streamlit=True and Streamlit is available, use st.session_state.
+    Else, use in-memory global storage.
+    """
+    if use_streamlit:
+        try:
+            import streamlit as st
+            if session_id not in st.session_state:
+                st.session_state[session_id] = InMemoryChatMessageHistory()
+            return st.session_state[session_id]
+        except ImportError:
+            pass  # fallback
+
+    if session_id not in global_chat_map:
+        global_chat_map[session_id] = InMemoryChatMessageHistory()
+    return global_chat_map[session_id]
 
     
 class ExtractorAgent(BaseAgent):
 
-    def __init__(self):
+    def __init__(self,vector_database , use_streamlit = True):
         super().__init__()
         self.llm = AzureChatOpenAI(
                     azure_endpoint = os.getenv("AZURE_ENDPOINT"),
-                    api_key = os.getenv("OPENAI_API_KEY"),  # או פשוט המחרוזת עצמה אם אתה לא רוצה ENV
+                    api_key = os.getenv("OPENAI_API_KEY"),
                     api_version="2024-08-01-preview",
-                    azure_deployment="Diplochat",
+                    azure_deployment="gpt-4o-mini",
                     temperature=0.0,
                 )
-        
-        self.tools = [identify_entity_type]
-        self.context_agent = initialize_agent(tools = self.tools,llm = self.llm, agent=AgentType.OPENAI_FUNCTIONS,verbose=True)
+        self.embedding_model = AzureOpenAI(azure_endpoint = os.getenv("AZURE_ENDPOINT"), api_key = os.getenv("OPENAI_API_KEY"), api_version = "2024-08-01-preview")
+
+        self.use_streamlit = use_streamlit
+        self.tool = make_search_entities_tool(self.embedding_model, vector_database)
+        self.context_agent = initialize_agent(tools = [self.tool], llm = self.llm, agent=AgentType.OPENAI_FUNCTIONS,verbose=True)
         self.system_prompt = self.get_system_prompt()
         
-
-    
     def get_system_prompt(self) -> SystemMessagePromptTemplate:
-        return SystemMessagePromptTemplate.from_template(
-                """
-                You are a Context Extraction and Reasoning Agent.
+        return SystemMessagePromptTemplate.from_template("""
+        You are an Entity Extraction and Context Understanding Agent in a multi-agent system.
+        Your job is to extract potential business entity names from the user's question and call the tool `search_entities_in_vdb` with those names.
 
-                Your job is to:
-                1. Extract structured entities mentioned in the user question.
-                2. Understand the user's analytical intent (Meaning).
-                3. Classify the question into a known analytical category (Question_Type).
+        Instructions:
+        Extract proper business entity names from the user's question. These include:
+        - Brand names (e.g., פרינגלס)
+        - Retail chains (e.g., רמי לוי, שופרסל)
+        - Customers (e.g , רשת חנויות רמי לוי שיווק השיקמה)
+        - Distributors or suppliers (e.g., דיפלומט)
+        - Specific product names (multi-word)
+        - Keep compound names intact (e.g., "פרינגלס שמנת בצל").
+        - DO NOT include words like 'customer', 'profit', 'רווח', 'לקוח' or generic descriptors.
+        - If any extracted name is written in English or other non-Hebrew languages, translate it into Hebrew before calling the tool.
+        - Call the tool `search_entities_in_vdb` with the final list of names.
 
-                ---
+        Tool Behavior:
+        - Accepts a list of Hebrew names
+        - Returns up to 5 best matches for each name including type, score, and metadata
 
-                Your output must be a valid Python dictionary with these keys:
-                - "Entities": A list of dictionaries with the following fields:
-                    - type: One of ("Item_Name", "Brand_Name", "Category_Name", "Supplier_Name", "Holiday")
-                    - name: The matched name from the dataset (if found by the tool `identify_entity_type`), or the original input.
-                    - category: If available; otherwise do not include.
-                    - metadata: Optional additional notes if relevant (e.g., "multiple items matched").
+        Your output MUST be
+        {{
+          "ExtractedNames": [...],
+          "EntityCandidates": raw results from the tool
+        }}
 
-                - "Meaning": A short plain-English description of what the user wants to analyze.  
-                - Be specific: Describe whether a percentage, comparison table, or total value is expected.
-                  Include all relevant entity names (without translation or modification). Unless otherwise determined through your use of the 'identify_entity_type' tool
+        """)
 
-                - "Question_Type": One of the following:
-                    - "Market_Share_Brand"
-                    - "Market_Share_Item"
-                    - "Market_Share_Brand_Excluding_Supplier"
-                    - "Market_Share_Competitors"
-                    - "Market_Share_Supplier"
-                    - "Top_Selling_Items"
-                    - "Average_Price_By_Chain"
-                    - "Custom" (if none of the above apply)
-
-                ---
-
-                Instructions:
-
-                - If a supplier is explicitly mentioned in a negative context (e.g., "excluding דיפלומט"), use the `_Excluding_Supplier` version of the Question_Type.
-                - If the question compares דיפלומט to others, use "Market_Share_Competitors".
-                - If the intent is ambiguous but involves a brand or product, default to "Market_Share_Brand".
-                - Never translate any name or phrase.
-                - If you are unsure about the entity type, use the tool `identify_entity_type`.
-                - If no valid entities are found, still return "Meaning" and "Question_Type" based on the user's intent.
-
-                Always return a valid Python dictionary.
-                """
-                )
 
     def response(self, user_question: str, max_retries: int = 5, delay: float = 1.0) -> dict:
         prompt_template = ChatPromptTemplate.from_messages([
@@ -107,11 +114,10 @@ class ExtractorAgent(BaseAgent):
     
         pipeline_with_history = RunnableWithMessageHistory(
             pipeline,
-            get_session_history=get_chat_history,
+            get_session_history=lambda session_id: get_chat_history(session_id, self.use_streamlit),
             history_messages_key="history",
             input_messages_key="user_question"
         )
-
         self.reset_fields()
         self.set_question(user_question)
         self.start_timer()
@@ -123,10 +129,8 @@ class ExtractorAgent(BaseAgent):
                 self.increment_calls()
                 answer = pipeline_with_history.invoke({"user_question": user_question},config={"session_id": 'ExtractorHistory'})
                 self.stop_timer()
-                context = json.loads(answer['output'])
-                context = json.dumps(context, ensure_ascii=False, separators=(",", ":"))
-                self.set_answer(context)
-                return context
+                self.set_answer(answer['output'])
+                return answer['output']
             
             except RateLimitError as e:
                 logging.warning(f"[Retry {attempt}/{max_retries}] Rate limit error: {e}")
@@ -142,92 +146,4 @@ class ExtractorAgent(BaseAgent):
         # if we reached here, all retries failed
         raise RuntimeError(f"Failed after {max_retries} retries due to rate limit. Last error: {last_error}")
     
-
-
-@tool
-def identify_entity_type(entity_name: str) -> dict:
-    """ Smart identification of entity type. """
-    entity_name = entity_name.strip()
-
-    if detect_local_environment():
-        stnx_items = pd.read_parquet("parquet_files/DW_DIM_STORENEXT_BY_INDUSTRIES_ITEMS.parquet")
-    else:
-        stnx_items = st.session_state['Dataframes']['DW_DIM_STORENEXT_BY_INDUSTRIES_ITEMS']
-
-    result = {
-        "type": "Unknown",
-        "name": entity_name,
-        "category": None,
-        "metadata": None
-    }
-    print(entity_name)
-    # --- 1. Exact match in Category_Name ---
-    if entity_name in stnx_items['Category_Name'].dropna().unique():
-        print("exact math in category")
-        result["type"] = "Category_Name"
-        result["category"] = entity_name
-        return result
-
-    # --- 2. Exact match in Brand_Name ---
-    if entity_name in stnx_items['Brand_Name'].dropna().unique():
-        print("exact math in brand name")
-        result["type"] = "Brand_Name"
-        cat = stnx_items.loc[stnx_items['Brand_Name'] == entity_name, 'Category_Name'].dropna().unique()
-        if len(cat) > 0:
-            result["category"] = cat[0]
-        return result
-
-    # --- 3. Exact match in Item_Name ---
-    if entity_name in stnx_items['Item_Name'].dropna().unique():
-        print("exact math in item name")
-        result["type"] = "Item_Name"
-        cat = stnx_items.loc[stnx_items['Item_Name'] == entity_name, 'Category_Name'].dropna().unique()
-        if len(cat) > 0:
-            result["category"] = cat[0]
-        return result
-
-    # --- 4. Partial match in Category_Name ---
-    partial_cat = stnx_items[stnx_items['Category_Name'].str.contains(entity_name, na=False)]
-    print("partial math in category")
-    if not partial_cat.empty:
-        result["type"] = "Category_Name"
-        result["name"] = partial_cat.iloc[0]['Category_Name']
-        result["category"] = partial_cat.iloc[0]['Category_Name']
-        return result
-
-    # --- 5. Partial match in Brand_Name ---
-    partial_brand = stnx_items[stnx_items['Brand_Name'].str.contains(entity_name, na=False)]
-    if not partial_brand.empty:
-        print("partial math in brand")
-        result["type"] = "Brand_Name"
-        result["name"] = partial_brand.iloc[0]['Brand_Name']
-        cat = partial_brand['Category_Name'].dropna().unique()
-        if len(cat) > 0:
-            result["category"] = cat[0]
-        return result
-
-    # --- 6. Partial match in Item_Name ---
-    partial_item = stnx_items[stnx_items['Item_Name'].str.contains(entity_name, na=False)]
-    if not partial_item.empty:
-        print("partial math in item")
-        result["type"] = "Item_Name"
-        result["name"] = partial_item.iloc[0]['Item_Name']
-        cat = partial_item['Category_Name'].dropna().unique()
-        if len(cat) > 0:
-            result["category"] = cat[0]
-        count = partial_item['Barcode'].nunique()
-        if count > 1:
-            result["metadata"] = f"There are {count} items that contain that phrase"
-        return result
-
-    # --- 7. Exact match in Supplier_Name ---
-    if entity_name in stnx_items['Supplier_Name'].dropna().unique():
-        result = {
-            "type": "Supplier_Name",
-            "name": entity_name,
-            "category": None
-        }
-        return result
-
-    return result
-
+    

@@ -10,6 +10,8 @@ from streamlit_navigation_bar import st_navbar
 import json
 from sqlalchemy import create_engine
 import streamlit as st
+from openai import AzureOpenAI
+from st_bridge import bridge, html
 
 def load_css():
     st.markdown(
@@ -37,8 +39,11 @@ def create_navigation_bar():
             "font-size": "25px",
             "width": "100%",
             "font-family": "Calibri, sans-serif",
-            "direction": "rtl",
-            "justify-content": "space-between",
+            "direction": "ltr",
+            "display": "flex",
+            "justify-content": "space-between",  # אם יש לוגו מצד אחד ותפריט מצד שני
+            "align-items": "center",
+            "padding": "0 20px",
             "box-shadow": "0px 4px 10px rgba(0, 0, 0, 0.3)"
         },
         "img": {
@@ -92,7 +97,8 @@ def get_local_scope():
             'customer_df': dataframes.get('DW_DIM_CUSTOMERS', pd.DataFrame()).drop_duplicates(subset=['CUSTOMER_CODE']),
             'industry_df': dataframes.get('DW_DIM_INDUSTRIES'),
             'material_df': dataframes.get('DW_DIM_MATERIAL', pd.DataFrame()).drop_duplicates(subset=['MATERIAL_NUMBER']),
-            'dt_df': dataframes.get('DATE_HOLIAY_DATA')
+            'dt_df': dataframes.get('DATE_HOLIAY_DATA'),
+            'vector_database' : dataframes.get('vector_database')
         }
     
     elif st.session_state.get('aggregation_mode') == 'Weekly':
@@ -104,7 +110,8 @@ def get_local_scope():
             'customer_df': dataframes.get('DW_DIM_CUSTOMERS', pd.DataFrame()).drop_duplicates(subset=['CUSTOMER_CODE']),
             'industry_df': dataframes.get('DW_DIM_INDUSTRIES'),
             'material_df': dataframes.get('DW_DIM_MATERIAL', pd.DataFrame()).drop_duplicates(subset=['MATERIAL_NUMBER']),
-            'dt_df': dataframes.get('DATE_HOLIAY_DATA')
+            'dt_df': dataframes.get('DATE_HOLIAY_DATA'),
+            'vector_database' : dataframes.get('vector_database')
         }
 
     st.session_state['local_scope'] = scope
@@ -174,7 +181,7 @@ def create_aggregation_option():
 
 def rate_response():
     with elements("rating_section"):
-        with mui.Box(sx={"display": "flex", "flexDirection": "column", "alignItems": "right", "marginTop": "20px"}):
+        with mui.Box(sx={"display": "flex-end", "flexDirection": "column", "alignItems": "right", "marginTop": "20px"}):
 
             def handle_rating_change(event, value):
                 st.session_state["Rating"] = value
@@ -191,6 +198,10 @@ def rate_response():
                 size="small",
                 precision=1
             )
+
+def get_embedding_model():
+    embedding_model = AzureOpenAI(azure_endpoint = os.getenv("AZURE_ENDPOINT"), api_key = os.getenv("OPENAI_API_KEY"), api_version = "2024-08-01-preview")
+    return embedding_model
 
 
 @st.cache_resource
@@ -217,3 +228,220 @@ def write_logs_to_sql(log_df: pd.DataFrame):
 
     except Exception as e:
         st.error(f"Error on saving rows into logs table {e}")
+
+
+
+
+def create_floating_sidebar():
+    """
+    This function uses the "Bridge" library in order to send JavaScript requests to Streamlit 
+    and thus produce a floating menu of options for the user.
+    Return: the updated choice stored in the Streamlit session state.
+    """
+    if 'bridg_counter' not in st.session_state:
+        st.session_state.bridge_counter = 0
+        
+    unique_key = f"{st.session_state.bridge_counter}"
+    button_click = bridge(name="button-click-bridge", default=None, key=unique_key)
+
+    html(f"""
+        <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css">
+        <style>
+        /* Sidebar Container */
+        .sidebar-container {{
+            position: fixed;
+            top: 50%;
+            right: 20px;
+            transform: translateY(-50%);
+            width: 60px;
+            height: auto;
+            background-color: #f5f7fa;
+            border-radius: 30px;
+            box-shadow: 0px 4px 10px rgba(0, 0, 0, 0.1);
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            padding: 10px 0;
+            z-index: 1000;
+            direction: rtl;
+        }}
+
+        /* General Button Styles */
+        .icon-btn {{
+            background-color: #ffffff;
+            color: #48547c;
+            border: 2px solid #ffffff;
+            padding: 10px;
+            border-radius: 50%;
+            font-size: 20px;
+            box-shadow: 0px 2px 5px rgba(0, 0, 0, 0.1);
+            cursor: pointer;
+            width: 45px;
+            height: 45px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            margin-bottom: 10px;
+            outline: none;
+            position: relative;
+        }}
+
+        /* Hover Effect */
+        .icon-btn:hover {{
+            background-color: #707998;
+            color: #ffffff;
+        }}
+        /* Specific Button Background Colors */
+        .icon-btn-save {{
+            background-color: #5f84ff;
+            color: #3855b5;
+        }}
+         
+        .icon-btn-save:hover {{
+            background-color: #5274e3;
+            color: #ffffff;
+        }}
+
+        .icon-btn-run {{
+            background-color: #69bd52;
+            color: #198600;
+
+        }}
+         
+        .icon-btn-run:hover {{
+            background-color: #388E3C;
+            color: #ffffff;
+
+        }}
+
+        .icon-btn-filter {{
+            background-color: #ffbb32;
+            color: #863600;
+        }}
+        
+         .icon-btn-filter:hover {{
+            background-color: #d99100;
+            color: #ffffff;
+        }}
+
+        .icon-btn-refresh {{
+            background-color: #a271ff;
+        }}
+         
+         
+        .icon-btn-refresh:hover {{
+            background-color: #8c57f1;
+            color: #ffffff;
+        }}
+         
+        .icon-btn-download {{
+            background-color: #00bfa5;
+            color:  #009688;
+        }}
+        
+        .icon-btn-download:hover {{
+            background-color: #00bfa5;
+            color: white;
+        }}
+        .icon-btn-comax {{
+            background-color: #ffffff;
+            color: #69bd52;
+        }}
+        
+         .icon-btn-comax:hover {{
+            background-color: #dfdfdf;
+            color: #69bd52;
+
+        }} 
+         
+        .icon-btn-restore {{
+            background-color: #FF6363;
+            color: #CC4B4B;
+        }}
+        
+         .icon-btn-restore:hover {{
+            background-color: #DE5F5F;
+            color: white;
+
+        }} 
+
+
+
+        /* Tooltip Styles */
+        .tooltip {{
+            position: absolute;
+            top: 50%;
+            right: 100%;
+            transform: translateY(-50%) translateX(-15px);
+            background-color: rgba(0, 0, 0, 0.75);
+            color: white;
+            padding: 5px 10px;
+            border-radius: 5px;
+            font-family: 'Calibri', sans-serif;
+            font-size: 14px;
+            white-space: nowrap;
+            opacity: 0;
+            pointer-events: none;
+            transition: opacity 0.3s ease, transform 0.3s ease;
+        }}
+
+        .icon-btn:hover .tooltip {{
+            opacity: 1;
+            transform: translateY(-50%) translateX(-25px);
+        }}
+        </style>
+
+        <div class="sidebar-container">
+            <!-- Run Button -->
+            <button class="icon-btn icon-btn-run {{ 'active' if st.session_state['side_bar_options'] == 'run' else '' }}" 
+                    onClick="stBridges.send('button-click-bridge', 'run');">
+                <i class="fa-solid fa-person-running"></i>
+                <div class="tooltip">הרץ את האלגוריתם</div>
+            </button>
+
+            <!-- Save Button -->
+            <button class="icon-btn icon-btn-save {{ 'active' if st.session_state['side_bar_options'] == 'save' else '' }}" 
+                    onClick="stBridges.send('button-click-bridge', 'save');">
+                <i class="fa-solid fa-floppy-disk"></i>
+                <div class="tooltip">שמור שינויים</div>
+            </button>
+
+            <!-- Filter Button -->
+            <button class="icon-btn icon-btn-filter {{ 'active' if st.session_state['side_bar_options'] == 'filter' else '' }}" 
+                    onClick="stBridges.send('button-click-bridge', 'filter');">
+                <i class="fa-solid fa-filter"></i>
+                <div class="tooltip">סינון תוצאות המודל</div>
+            </button>
+            
+            <!-- Refresh Button -->
+            <button class="icon-btn icon-btn-refresh {{ 'active' if st.session_state['side_bar_options'] == 'refresh' else '' }}" 
+                    onClick="stBridges.send('button-click-bridge', 'refresh');">
+                <i class="fa-solid fa-chart-line"></i>
+                <div class="tooltip">תוצאות המודל</div>
+            </button>
+            
+            <!-- Download Current Dataframe Button -->
+            <button class="icon-btn icon-btn-download" onClick="stBridges.send('button-click-bridge', 'download');">
+                <i class="fa-solid fa-download"></i>
+                <div class="tooltip">הורד קובץ CSV</div>
+            </button>
+
+            <!-- COMAX Button -->
+            <button class="icon-btn icon-btn-comax  {{ 'active' if st.session_state['side_bar_options'] == 'comax' else ''}}" 
+                    onClick="stBridges.send('button-click-bridge', 'comax');">
+                <i class="fa-solid fa-c"></i>
+                <div class="tooltip">הזנת נתונים למערכת COMAX</div>
+            </button>
+         
+            <!-- RESTORE Button -->
+            <button class="icon-btn icon-btn-restore  {{ 'active' if st.session_state['side_bar_options'] == 'restore' else ''}}" 
+                    onClick="stBridges.send('button-click-bridge', 'restore');">
+                <i class="fa-solid fa-arrow-rotate-right"></i>
+                <div class="tooltip">שחזר נתונים לנקודה האחרונה</div>
+            </button>
+        </div>
+    """)
+    
+    
+    return button_click

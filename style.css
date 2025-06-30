@@ -1,6 +1,6 @@
 
 body {
-  direction: rtl;
+  direction: ltr;
   font-family: "Calibri", sans-serif;
   margin: 0;
   padding: 0;
@@ -53,12 +53,3 @@ section.main {
 top: 65px !important;
 position: relative;
 }
-
-@media screen and (max-width: 768px) {
-section.main {
-  top: 50px !important;
-  padding: 0 0.5rem;
-  font-size: 0.9rem;
-}
-}
-
