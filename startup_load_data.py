@@ -5,10 +5,8 @@ from azure.storage.blob import BlobServiceClient
 
 BLOB_CONNECTION_STRING = os.getenv("AZURE_STORAGE_CONNECTION_STRING")
 CONTAINER_NAME = "data"
-TEMP_DIR = tempfile.gettempdir()
 
-# כל הקבצים למעט vector
-MAIN_BLOB_FILE_NAMES = [
+BLOB_FILE_NAMES = [
     "AGGR_MONTHLY_DW_CHP.parquet",
     "AGGR_MONTHLY_DW_FACT_STORENEXT_BY_INDUSTRIES_SALES.parquet",
     "AGGR_MONTHLY_DW_INVOICES.parquet",
@@ -18,13 +16,15 @@ MAIN_BLOB_FILE_NAMES = [
     "DW_DIM_STORENEXT_BY_INDUSTRIES_ITEMS.parquet",
     "DW_DIM_CUSTOMERS.parquet",
     "DW_DIM_INDUSTRIES.parquet",
-    "DW_DIM_MATERIAL.parquet"
+    "DW_DIM_MATERIAL.parquet",
+    "stnx_entities.parquet",
+    "chp_entities.parquet",
+    "customer_entities.parquet"
 ]
-
-VECTOR_FILE = "vector_database.parquet"
 
 blob_service_client = BlobServiceClient.from_connection_string(BLOB_CONNECTION_STRING)
 container_client = blob_service_client.get_container_client(CONTAINER_NAME)
+TEMP_DIR = tempfile.gettempdir()
 
 def download_blob(blob_name):
     download_path = os.path.join(TEMP_DIR, blob_name)
@@ -44,25 +44,16 @@ def download_blob(blob_name):
         return None
 
 def preload_all_blobs():
-    print("[START] 🚀 מתחיל להוריד את קבצי ה־Parquet (ללא vector_database)...")
-
-    # שלב 1: הורדה מקבילית רגילה
-    with concurrent.futures.ThreadPoolExecutor(max_workers=6) as executor:
-        results = list(executor.map(download_blob, MAIN_BLOB_FILE_NAMES))
-
-    failed = [f for f, path in zip(MAIN_BLOB_FILE_NAMES, results) if path is None or not os.path.exists(path) or os.path.getsize(path) == 0]
+    print("[START] מתחיל להוריד את קבצי ה־Parquet הדרושים...")
+    with concurrent.futures.ThreadPoolExecutor(max_workers=16) as executor:
+        results = list(executor.map(download_blob, BLOB_FILE_NAMES))
+    
+    failed = [f for f, path in zip(BLOB_FILE_NAMES, results) if path is None or not os.path.exists(path) or os.path.getsize(path) == 0]
     if failed:
-        print(f"[❌] הקבצים הבאים לא ירדו כראוי: {failed}")
+        print(f"❌ הקבצים הבאים לא ירדו כראוי: {failed}")
     else:
-        print("[✅] כל הקבצים הבסיסיים ירדו בהצלחה.")
-
-    # שלב 2: הורדת vector_database לבד
-    print("\n[INFO] מתחיל להוריד את vector_database.parquet לבד...")
-    vector_path = download_blob(VECTOR_FILE)
-    if not vector_path:
-        print("[⚠️] vector_database.parquet לא ירד! המשך בזהירות.")
-    else:
-        print("[✅] vector_database.parquet ירד בהצלחה.")
+        print("[DONE] ✅ כל הקבצים ירדו בהצלחה.")
+    return results
 
 if __name__ == "__main__":
     preload_all_blobs()

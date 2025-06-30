@@ -136,8 +136,25 @@ def load_data_with_progress(parquet_dir: str):
 
 
 def load_vector_database(parquet_dir: str):
-    path = os.path.join(parquet_dir, "vector_database.parquet")
-    df = read_parquet_file(path)
-    if df is not None:
+    path = os.path.join(parquet_dir, "stnx_entities.parquet")
+    stnx_entities = read_parquet_file(path)
+    path = os.path.join(parquet_dir, "chp_entities.parquet")
+    chp_entities = read_parquet_file(path)
+    path = os.path.join(parquet_dir, "customer_entities.parquet")
+    customer_entities = read_parquet_file(path)
+    combined_entities = pd.concat([stnx_entities, chp_entities,customer_entities], ignore_index=True)
+
+    def clean_and_tag_metadata(row):
+        meta = row.get("metadata", {})
+        if isinstance(meta, dict):
+            cleaned_meta = {k: v for k, v in meta.items() if v is not None}
+            cleaned_meta["source_table"] = row.get("source_table")
+            cleaned_meta["column"] = row.get("type")
+            return cleaned_meta
+        return {}
+
+    combined_entities["metadata"] = combined_entities.apply(clean_and_tag_metadata, axis=1)
+
+    if combined_entities is not None:
         st.success("✅ Vector database loaded")
-    return df
+    return combined_entities
