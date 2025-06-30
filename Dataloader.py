@@ -5,6 +5,7 @@ from pyluach import dates
 import streamlit as st
 import time
 import concurrent.futures
+import numpy as np
 
 class DataLoader:
     def __init__(self):
@@ -109,8 +110,15 @@ def read_parquet_file(file_path):
 @st.cache_resource
 def load_data_with_progress(parquet_dir: str):
     """Load parquet files with Streamlit progress bar (excluding vector_database.parquet)."""
+    EXCLUDED_PARQUETS = {
+    "vector_database.parquet",
+    "stnx_entities_meta.parquet",
+    "chp_entities_meta.parquet",
+    "customer_entities_meta.parquet"
+    }
+
     dataframes = {}
-    files = [f for f in os.listdir(parquet_dir) if f.endswith(".parquet") and f != "vector_database.parquet"]
+    files = [f for f in os.listdir(parquet_dir) if f.endswith(".parquet") and f not in EXCLUDED_PARQUETS]
 
     with concurrent.futures.ThreadPoolExecutor(max_workers=4) as executor:
         futures = {}
@@ -137,10 +145,22 @@ def load_data_with_progress(parquet_dir: str):
 
 
 def load_vector_database(parquet_dir: str):
-    stnx_entities = st.session_state['DataFrames']['stnx_entities']
-    chp_entities = st.session_state['DataFrames']['chp_entities.parquet']
-    customer_entities = st.session_state['DataFrames']['customer_entities.parquet']
-    combined_entities = pd.concat([stnx_entities, chp_entities,customer_entities], ignore_index=True)
+    def load_entity_pair(name):
+        meta_path = os.path.join(parquet_dir, f"{name}_meta.parquet")
+        embedding_path = os.path.join(parquet_dir, f"{name}_embedding.npy")
+
+        df = pd.read_parquet(meta_path)
+        embeddings = np.load(embedding_path)
+
+        # ודא שכל embedding הוא np.ndarray
+        df["embedding"] = [np.array(vec, dtype=np.float32) for vec in embeddings]
+        return df
+
+    stnx_entities = load_entity_pair("stnx_entities")
+    chp_entities = load_entity_pair("chp_entities")
+    customer_entities = load_entity_pair("customer_entities")
+
+    combined_entities = pd.concat([stnx_entities, chp_entities, customer_entities], ignore_index=True)
 
     def clean_and_tag_metadata(row):
         meta = row.get("metadata", {})

@@ -17,9 +17,14 @@ BLOB_FILE_NAMES = [
     "DW_DIM_CUSTOMERS.parquet",
     "DW_DIM_INDUSTRIES.parquet",
     "DW_DIM_MATERIAL.parquet",
-    "stnx_entities.parquet",
-    "chp_entities.parquet",
-    "customer_entities.parquet"
+    
+    # הקבצים המפוצלים:
+    "stnx_entities_meta.parquet",
+    "stnx_entities_embedding.npy",
+    "chp_entities_meta.parquet",
+    "chp_entities_embedding.npy",
+    "customer_entities_meta.parquet",
+    "customer_entities_embedding.npy"
 ]
 
 blob_service_client = BlobServiceClient.from_connection_string(BLOB_CONNECTION_STRING)

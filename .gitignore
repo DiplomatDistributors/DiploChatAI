@@ -29,3 +29,4 @@ parquet_files/
 # Temporary folders
 Backup/
 flask_session/
+embeddings/
