@@ -143,7 +143,7 @@ def load_data_with_progress(parquet_dir: str):
     print(dataframes.keys())
     return dataframes
 
-
+@st.cache_resource
 def load_vector_database(parquet_dir: str):
     def load_entity_pair(name):
         meta_path = os.path.join(parquet_dir, f"{name}_meta.parquet")
